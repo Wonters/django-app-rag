@@ -19,5 +19,11 @@
     window.SOURCE_FORM_URL = "{% url 'django_app_rag:source-add' %}";
     window.SOURCE_EDIT_URL = "{% url 'django_app_rag:source-edit' pk='__pk__' %}";
     window.SOURCE_API_URL = "{% url 'django_app_rag:sources-list' %}";
+    window.COLLECTION_API_URL = "{% url 'django_app_rag:collections-list' %}";
+    window.COLLECTION_FORM_URL = "{% url 'django_app_rag:collection-add' %}";
+    window.COLLECTION_EDIT_URL = "{% url 'django_app_rag:collection-edit' pk='__pk__' %}";
+    window.QUESTION_FORM_URL = "{% url 'django_app_rag:question-add' %}";
+    window.QUESTION_EDIT_URL = "{% url 'django_app_rag:question-edit' pk='__pk__' %}";
+    window.QUESTION_API_URL = "{% url 'django_app_rag:questions-list' %}";
   </script>
 {% endblock %}

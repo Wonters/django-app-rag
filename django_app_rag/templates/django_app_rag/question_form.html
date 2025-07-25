@@ -1,0 +1,18 @@
+{% extends "django_app_rag/base.html" %}
+{% block content %}
+<div class="container p-3">
+    <h1>Ajouter une question</h1>
+    <form method="post">
+        {% csrf_token %}
+        {{ form.as_p }}
+        <button class="btn btn-primary" type="submit">Ajouter</button>
+    </form>
+    {% if form.errors %}
+        <div class="alert alert-danger">
+            <strong>Erreur:</strong>
+            {{ form.errors }}
+        </div>
+    {% endif %}
+</div>
+
+{% endblock %}

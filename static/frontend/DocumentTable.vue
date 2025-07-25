@@ -6,6 +6,8 @@
           <th>{{ t('ID', 2) }}</th>
           <th>{{ t('Source name', 2) }}</th>
           <th>{{ t('Type', 2) }}</th>
+          <th>{{ t('Questions', 2) }}</th>
+          <th>{{ t('Answers', 2) }}</th>
           <th>{{ t('Actions', 2) }}</th>
         </tr>
       </thead>
@@ -17,11 +19,20 @@
           </td>
           <td>{{ source.type }}</td>
           <td>
+            <span class="badge bg-primary">{{ source.questions_count || 0 }}</span>
+          </td>
+          <td>
+            <span class="badge bg-success">{{ source.answers_count || 0 }}</span>
+          </td>
+          <td>
             <button class="btn btn-danger" @click="deleteSource(source.id)" data-bs-toggle="tooltip" data-bs-placement="top" :title="t('Delete', 1)">
               <i class="bi bi-trash"></i>
             </button>
             <button class="btn btn-primary mx-2" @click="editSource(source.id)" data-bs-toggle="tooltip" data-bs-placement="top" :title="t('Edit', 1)">
               <i class="bi bi-pencil"></i>
+            </button>
+            <button class="btn btn-info" @click="viewSourceDetails(source.id)" data-bs-toggle="tooltip" data-bs-placement="top" :title="t('Voir détails', 1)">
+              <i class="bi bi-eye"></i>
             </button>
           </td>
         </tr>
@@ -31,15 +42,14 @@
 </template>
 
 <script setup>
-import { ref, onMounted, nextTick, watch, onBeforeUnmount, defineEmits } from 'vue';
+import { onMounted, nextTick, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 const { t } = useI18n();
-import $ from 'jquery';
-import 'datatables.net-bs5';
 import 'bootstrap/dist/css/bootstrap.min.css';
 import 'datatables.net-bs5/css/dataTables.bootstrap5.min.css';
-import { Tooltip } from 'bootstrap';
 import 'bootstrap/dist/js/bootstrap.bundle.min.js';
+import { useTooltips } from './composables/useTooltips';
+import { useDataTable } from './composables/useDataTable';
 
 const props = defineProps({
   sources: {
@@ -54,9 +64,11 @@ const props = defineProps({
   }
 });
 
-const emit = defineEmits(['edit']);
+const emit = defineEmits(['edit', 'view-details', 'delete']);
 
-const tableRef = ref(null);
+// Utilisation des composables
+const { initTooltips } = useTooltips();
+const { tableRef, initDataTable, destroyDataTable } = useDataTable();
 
 function getFileName(path) {
   if (!path) return '';
@@ -69,23 +81,6 @@ function formatDate(dateStr) {
   return d.toLocaleString('fr-FR');
 }
 
-let dataTableInstance = null;
-
-function initDataTable() {
-  if (!tableRef.value) return;
-  if ($.fn.dataTable.isDataTable(tableRef.value)) {
-    $(tableRef.value).DataTable().destroy();
-  }
-  dataTableInstance = $(tableRef.value).DataTable();
-}
-
-function destroyDataTable() {
-  if (dataTableInstance) {
-    dataTableInstance.destroy();
-    dataTableInstance = null;
-  }
-}
-
 function editSource(id) {
   // On émet un événement pour demander l'édition au parent
   console.log('Edit source', id);
@@ -93,18 +88,20 @@ function editSource(id) {
 }
 
 function deleteSource(id) {
-  // À implémenter : suppression côté parent ou API
-  // Ici, on évite juste l'erreur
-  console.log('Suppression source', id);
+  if (confirm(t('Êtes-vous sûr de vouloir supprimer cette source ?'))) {
+    emit('delete', id);
+  }
+}
+
+function viewSourceDetails(id) {
+  console.log('View source details', id);
+  emit('view-details', id);
 }
 
 onMounted(async () => {
   await nextTick();
   // Initialisation des tooltips Bootstrap
-  const tooltipTriggerList = document.querySelectorAll('[data-bs-toggle="tooltip"]');
-  tooltipTriggerList.forEach(tooltipTriggerEl => {
-    new Tooltip(tooltipTriggerEl);
-  });
+  initTooltips();
 });
 
 watch(() => props.sources, async () => {
@@ -112,13 +109,6 @@ watch(() => props.sources, async () => {
   await nextTick();
   initDataTable();
   // Réinitialisation des tooltips après mise à jour du DOM
-  const tooltipTriggerList = document.querySelectorAll('[data-bs-toggle="tooltip"]');
-  tooltipTriggerList.forEach(tooltipTriggerEl => {
-    new Tooltip(tooltipTriggerEl);
-  });
-});
-
-onBeforeUnmount(() => {
-  destroyDataTable();
+  initTooltips();
 });
 </script> 

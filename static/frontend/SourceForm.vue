@@ -29,7 +29,7 @@ const props = defineProps({
     required: true
   }
 });
-const emit = defineEmits(['close']);
+const emit = defineEmits(['close', 'success']);
 const iframe = ref(null);
 
 function close() {
@@ -38,11 +38,14 @@ function close() {
 
 function onIframeLoad() {
   try {
-    const url = iframe.value?.contentWindow?.location?.pathname;
-    if (url && url === props.formUrl) {
+    const currentUrl = iframe.value?.contentWindow?.location?.pathname;
+    const formUrlPath = new URL(props.formUrl, window.location.origin).pathname;
+    
+    if (currentUrl && currentUrl === formUrlPath) {
       // On ne ferme pas, c'est le formulaire affiché
     } else {
-      // On ferme si redirection (après POST)
+      // On ferme si redirection (après POST) et on émet un événement de succès
+      emit('success');
       close();
     }
   } catch (e) {

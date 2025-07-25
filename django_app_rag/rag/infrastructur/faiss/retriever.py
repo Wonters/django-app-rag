@@ -9,6 +9,8 @@ from langchain.docstore.in_memory import InMemoryDocstore
 from langchain.retrievers.parent_document_retriever import ParentDocumentRetriever
 from langchain_text_splitters import TextSplitter
 from langchain_community.vectorstores import FAISS
+from langchain_core.callbacks import CallbackManagerForRetrieverRun
+from langchain.retrievers.multi_vector import SearchType
 
 
 class FaissParentDocumentRetriever(ParentDocumentRetriever):
@@ -138,3 +140,32 @@ class FaissParentDocumentRetriever(ParentDocumentRetriever):
         # Avoid compute embeddings every time
         logger.info(f"Saving vectorstore to {self._persistent_path}")
         self.vectorstore.save_local(self._persistent_path)
+
+
+    def _get_relevant_documents(
+        self, query: str, *, run_manager: CallbackManagerForRetrieverRun
+    ) -> list[Document]:
+        """Get documents relevant to a query.
+        Args:
+            query: String to find relevant documents for
+            run_manager: The callbacks handler to use
+        Returns:
+            List of relevant documents
+        """
+        if self.search_type == SearchType.mmr:
+            sub_docs = self.vectorstore.max_marginal_relevance_search(
+                query, **self.search_kwargs
+            )
+        elif self.search_type == SearchType.similarity_score_threshold:
+            sub_docs_and_similarities = (
+                self.vectorstore.similarity_search_with_relevance_scores(
+                    query, **self.search_kwargs
+                )
+            )
+            logger.info(f"Scores: {[score for _, score in sub_docs_and_similarities]}")
+            sub_docs = [sub_doc for sub_doc, _ in sub_docs_and_similarities]
+        else:
+            sub_docs = self.vectorstore.similarity_search(query, **self.search_kwargs)
+            logger.info(f"Sub_docs: {sub_docs}")
+        # On retourne directement les documents trouvés par la recherche vectorielle
+        return sub_docs
