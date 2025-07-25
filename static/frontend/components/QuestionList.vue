@@ -98,10 +98,14 @@ import { useI18n } from 'vue-i18n';
 import 'bootstrap/dist/css/bootstrap.min.css';
 import 'datatables.net-bs5/css/dataTables.bootstrap5.min.css';
 import 'bootstrap/dist/js/bootstrap.bundle.min.js';
-import { useTooltips } from './composables/useTooltips';
-import { useDataTable } from './composables/useDataTable';
+import { useTooltips } from '../composables/useTooltips';
+import { useDataTable } from '../composables/useDataTable';
+import { useErrorHandler } from '../composables/useErrorHandler.js';
 
 const { t } = useI18n();
+
+// Utilisation du composable d'erreur
+const { logger } = useErrorHandler();
 
 const props = defineProps({
   questions: {
@@ -161,7 +165,7 @@ onMounted(async () => {
       initTooltips();
     }
   } catch (error) {
-    console.warn('Erreur lors de l\'initialisation du tableau:', error);
+    logger.warn('Erreur lors de l\'initialisation du tableau:', error);
   }
 });
 
@@ -195,7 +199,7 @@ watch(() => props.questions, async () => {
       initTooltips();
     }
   } catch (error) {
-    console.warn('Erreur lors de la mise à jour du tableau:', error);
+    logger.warn('Erreur lors de la mise à jour du tableau:', error);
   }
 }, { deep: true });
 </script>

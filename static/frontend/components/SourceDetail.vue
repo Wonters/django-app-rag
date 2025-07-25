@@ -64,7 +64,20 @@
       :question="editingQuestion || null"
       :form-url="currentQuestionFormUrl"
       @close="handleQuestionFormClosed"
-      @question-saved="handleQuestionSaved"
+      @success="handleQuestionSaved"
+    />
+
+    <!-- Notifications toast -->
+    <NotificationToast 
+      :notifications="notifications"
+      @remove="removeNotification"
+    />
+
+    <!-- Modale de confirmation -->
+    <ConfirmationModal 
+      :confirmation-modal="confirmationModal"
+      @confirm="handleConfirm"
+      @cancel="handleCancel"
     />
   </div>
 </template>
@@ -74,9 +87,25 @@ import { ref, onMounted, computed } from 'vue';
 import { useI18n } from 'vue-i18n';
 import QuestionList from './QuestionList.vue';
 import QuestionForm from './QuestionForm.vue';
-import apiService from './services/apiService.js';
+import NotificationToast from './NotificationToast.vue';
+import ConfirmationModal from './ConfirmationModal.vue';
+import apiService from '../services/apiService.js';
+import { useErrorHandler } from '../composables/useErrorHandler.js';
+import { QUESTION_API_URL, QUESTION_FORM_URL, QUESTION_EDIT_URL } from '../config/api.js';
 
 const { t } = useI18n();
+
+// Utilisation du composable d'erreur
+const {
+  notifications,
+  confirmationModal,
+  showSuccess,
+  showError,
+  confirmDelete,
+  handleApiError,
+  removeNotification,
+  logger
+} = useErrorHandler();
 
 const props = defineProps({
   source: {
@@ -92,33 +121,36 @@ const showQuestionForm = ref(false);
 const editingQuestion = ref(null);
 const isLoading = ref(false);
 
-// URLs pour les API
-const questionApiUrl = window.QUESTION_API_URL || '/api/questions/';
-const questionFormUrl = window.QUESTION_FORM_URL || '/questions/create/';
-const questionEditUrl = window.QUESTION_EDIT_URL || '/questions/edit/';
+// URLs depuis la configuration centralisée
+const questionApiUrl = QUESTION_API_URL;
+const questionFormUrl = QUESTION_FORM_URL;
+const questionEditUrl = QUESTION_EDIT_URL;
 
 // Computed pour l'URL du formulaire de question
 const currentQuestionFormUrl = computed(() => {
-  if (editingQuestion.value && editingQuestion.value.id) {
+  if (editingQuestion.value) {
     return questionEditUrl.replace('__pk__', editingQuestion.value.id);
   }
   return questionFormUrl;
 });
 
-function formatDate(dateStr) {
-  if (!dateStr) return '';
-  const d = new Date(dateStr);
-  return d.toLocaleString('fr-FR');
+// Gestionnaires d'événements pour les composants UI
+function handleConfirm() {
+  // Cette fonction sera appelée par la modale de confirmation
+  // La logique spécifique est gérée dans les callbacks de confirmDelete
 }
 
+function handleCancel() {
+  // Cette fonction sera appelée quand l'utilisateur annule une confirmation
+  // Pas d'action nécessaire ici
+}
+
+// Fonctions
 async function fetchQuestions() {
+  isLoading.value = true;
+  
   try {
-    isLoading.value = true;
-    
-    // Ajouter un timestamp pour éviter le cache
-    const timestamp = new Date().getTime();
-    const url = `${questionApiUrl}?source=${props.source.id}&_t=${timestamp}`;
-    
+    const url = `${questionApiUrl}?source_id=${props.source.id}`;
     const response = await apiService.get(url);
     
     if (!response.ok) {
@@ -128,9 +160,10 @@ async function fetchQuestions() {
     const data = await response.json();
     questions.value = Array.isArray(data) ? data : (data.results || []);
     
-    console.log('Questions chargées avec succès:', questions.value.length);
+    logger.log('Questions chargées avec succès:', questions.value.length);
   } catch (error) {
-    console.error('Erreur lors du chargement des questions:', error);
+    logger.error('Erreur lors du chargement des questions:', error);
+    showError(t('Erreur lors du chargement des questions'));
     questions.value = [];
   } finally {
     isLoading.value = false;
@@ -143,28 +176,26 @@ function handleEditQuestion(question) {
 }
 
 function handleDeleteQuestion(questionId) {
-  if (confirm(t('Êtes-vous sûr de vouloir supprimer cette question ?'))) {
-    deleteQuestion(questionId);
-  }
-}
-
-async function deleteQuestion(questionId) {
-  try {
-    console.log('Suppression de la question:', questionId);
-    const response = await apiService.deleteWithCsrfFetch(`${questionApiUrl}${questionId}/`);
-    
-    if (response.ok) {
-      console.log('Question supprimée avec succès');
-      // Rafraîchir immédiatement la liste
-      await fetchQuestions();
-    } else {
-      console.error('Erreur lors de la suppression de la question:', response.status);
-      alert(t('Erreur lors de la suppression de la question'));
+  const question = questions.value.find(q => q.id === questionId);
+  const questionTitle = question?.title || 'cette question';
+  
+  confirmDelete(questionTitle, async () => {
+    try {
+      logger.log('Suppression de la question:', questionId);
+      const response = await apiService.deleteWithCsrfFetch(`${questionApiUrl}${questionId}/`);
+      
+      if (response.ok) {
+        logger.log('Question supprimée avec succès');
+        showSuccess(t('Question supprimée avec succès'));
+        // Rafraîchir immédiatement la liste
+        await fetchQuestions();
+      } else {
+        showError(t('Erreur lors de la suppression de la question'));
+      }
+    } catch (error) {
+      handleApiError(error, t('Erreur lors de la suppression de la question'));
     }
-  } catch (error) {
-    console.error('Erreur lors de la suppression:', error);
-    alert(t('Erreur lors de la suppression de la question'));
-  }
+  });
 }
 
 function closeQuestionForm() {
@@ -177,35 +208,42 @@ function handleQuestionSaved() {
   
   // Ajouter un délai pour s'assurer que les données sont sauvegardées côté serveur
   setTimeout(async () => {
-    console.log('Rafraîchissement des questions après sauvegarde...');
+    logger.log('Rafraîchissement des questions après sauvegarde...');
     await fetchQuestions();
+    showSuccess(t('Question sauvegardée avec succès'));
   }, 500);
 }
 
 function handleQuestionFormClosed() {
   // Si le formulaire est fermé sans sauvegarde, on ne fait rien
-  console.log('Formulaire fermé sans sauvegarde');
+  logger.log('Formulaire fermé sans sauvegarde');
 }
 
 async function handleBack() {
   try {
-    console.log('handleBack called');
-    console.log('Emitting back event');
+    logger.log('handleBack called');
+    logger.log('Emitting back event');
     
     // Add a small delay to ensure proper event processing
     await new Promise(resolve => setTimeout(resolve, 10));
     
     emit('back');
-    console.log('Back event emitted successfully');
+    logger.log('Back event emitted successfully');
   } catch (error) {
-    console.error('Error in handleBack:', error);
+    logger.error('Error in handleBack:', error);
     // Try to emit the event again as a fallback
     try {
       emit('back');
     } catch (fallbackError) {
-      console.error('Fallback emit also failed:', fallbackError);
+      logger.error('Fallback emit also failed:', fallbackError);
     }
   }
+}
+
+function formatDate(dateStr) {
+  if (!dateStr) return '';
+  const d = new Date(dateStr);
+  return d.toLocaleString('fr-FR');
 }
 
 onMounted(() => {

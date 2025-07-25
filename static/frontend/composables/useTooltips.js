@@ -15,7 +15,10 @@ export function useTooltips() {
         // Vérifier si l'élément existe et n'a pas déjà un tooltip
         if (tooltipTriggerEl && !tooltipTriggerEl._tooltip) {
           try {
-            const tooltip = new Tooltip(tooltipTriggerEl);
+            const tooltip = new Tooltip(tooltipTriggerEl, {
+              trigger: 'hover',
+              placement: 'top'
+            });
             tooltipInstances.value.push(tooltip);
           } catch (error) {
             console.warn('Erreur lors de l\'initialisation du tooltip:', error);

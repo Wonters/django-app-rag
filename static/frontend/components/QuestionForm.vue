@@ -28,6 +28,10 @@
 
 <script setup>
 import { ref, watch, computed } from 'vue';
+import { useErrorHandler } from '../composables/useErrorHandler.js';
+
+// Utilisation du composable d'erreur
+const { logger } = useErrorHandler();
 
 const props = defineProps({
   show: Boolean,
@@ -45,7 +49,7 @@ const props = defineProps({
   }
 });
 
-const emit = defineEmits(['close', 'question-saved']);
+const emit = defineEmits(['close', 'success']);
 const iframe = ref(null);
 
 // Computed pour l'URL du formulaire avec les paramètres
@@ -69,19 +73,19 @@ function onIframeLoad() {
     const currentUrl = iframe.value?.contentWindow?.location?.pathname;
     const formUrlPath = new URL(props.formUrl, window.location.origin).pathname;
     
-    console.log('Iframe loaded, current URL:', currentUrl, 'form URL path:', formUrlPath);
+    logger.log('Iframe loaded, current URL:', currentUrl, 'form URL path:', formUrlPath);
     
     if (currentUrl && currentUrl === formUrlPath) {
       // On ne ferme pas, c'est le formulaire affiché
-      console.log('Form displayed, not closing');
+      logger.log('Form displayed, not closing');
     } else {
       // On ferme si redirection (après POST)
-      console.log('Form submitted, closing and emitting question-saved');
+      logger.log('Form submitted, closing and emitting success');
       close();
-      emit('question-saved');
+      emit('success');
     }
   } catch (e) {
-    console.log('Cross-origin error, closing modal:', e);
+    logger.log('Cross-origin error, closing modal:', e);
     // Cross-origin, on ferme par sécurité
     close();
   }
@@ -89,15 +93,15 @@ function onIframeLoad() {
 
 // Améliorer la gestion de la fermeture manuelle
 function close() {
-  console.log('Closing question form');
+  logger.log('Closing question form');
   emit('close');
 }
 
 // Ajouter une méthode pour détecter la soumission du formulaire
 function handleFormSubmission() {
-  console.log('Form submission detected');
+  logger.log('Form submission detected');
   close();
-  emit('question-saved');
+  emit('success');
 }
 
 // Reset iframe src when popup opens or props change
