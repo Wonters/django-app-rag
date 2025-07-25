@@ -1,0 +1,9 @@
+static/node_modules
+static/dist
+static/build
+static/coverage
+static/dist
+static/build
+static/coverage
+__pycache__/
+.env

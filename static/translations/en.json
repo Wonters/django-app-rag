@@ -1,0 +1,13 @@
+{
+  "Test": "Testazer",
+  "Bienvenue sur le RAG Django": "Welcome to the Django RAG",
+  "Intégration Vue 3 + Vite + Django": "Vue 3 + Vite + Django integration",
+  "Vous pouvez modifier le contenu de ce fichier dans le dossier frontend": "You can edit the content of this file in the frontend folder",
+  "Liste des documents": "Document list",
+  "Ajouter un document": "Add a document",
+  "ID": "ID | IDs",
+  "Source name": "Source name | Source names",
+  "Type": "Type | Types",
+  "Actions": "Action | Actions",
+  "Delete": "Delete | Delete"
+}

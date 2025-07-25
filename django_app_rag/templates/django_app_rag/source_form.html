@@ -1,0 +1,21 @@
+{% extends "django_app_rag/base.html" %}
+{% load static %}
+{% block title %}Ajouter une source{% endblock %}
+{% block content %}
+<div class="container p-3">
+    <h5>Ajouter une source</h5>
+    <form method="post" novalidate>
+        {% csrf_token %}
+        {{ form.as_p }}
+        <div class="mt-3 text-end">
+            <button type="submit" class="btn btn-primary">Ajouter</button>
+        </div>
+    </form>
+    {% if form.errors %}
+        <div class="alert alert-danger mt-2">Veuillez corriger les erreurs du formulaire.</div>
+    {% endif %}
+    {% if form.non_field_errors %}
+        <div class="alert alert-danger mt-2">{{ form.non_field_errors }}</div>
+    {% endif %}
+</div>
+{% endblock %}

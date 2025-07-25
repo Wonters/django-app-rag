@@ -1,0 +1,23 @@
+{% extends "django_app_rag/base.html" %}
+{% load static %}
+
+{% block title %}RAG Frontend{% endblock %}
+{% block content %}
+    <div id="app"></div>
+{% endblock %}
+
+{% block extra-js %}
+{% if debug %}
+<script type="module" src="http://localhost:3000/@vite/client"></script>
+<!-- <script type="module" src="{% static 'frontend/main.js' %}"></script> -->
+<script type="module" src="http://localhost:3000/frontend/main.js"></script>
+{% else %}
+<!-- En prod, charger le build Vite (adapter le chemin si besoin) -->
+<script type="module" src="/static/dist/main.js"></script>
+{% endif %}
+<script>
+    window.SOURCE_FORM_URL = "{% url 'django_app_rag:source-add' %}";
+    window.SOURCE_EDIT_URL = "{% url 'django_app_rag:source-edit' pk='__pk__' %}";
+    window.SOURCE_API_URL = "{% url 'django_app_rag:sources-list' %}";
+  </script>
+{% endblock %}
