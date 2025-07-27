@@ -9,9 +9,8 @@ from ..steps.infrastructure import read_documents_from_diskstorage
 
 @pipeline
 def compute_rag_vector_index(
-    extract_collection_name: str,
+    collection_name: str,
     fetch_limit: int,
-    load_collection_name: str,
     content_quality_score_threshold: float,
     retriever_type: RetrieverType,
     embedding_model_id: str,
@@ -26,6 +25,7 @@ def compute_rag_vector_index(
     processing_batch_size: int = 256,
     processing_max_workers: int = 10,
     device: str = "cpu",
+    data_dir: str = "data"
 ) -> None:
     """Computes and stores RAG vector index from documents in MongoDB.
 
@@ -34,9 +34,8 @@ def compute_rag_vector_index(
 
     Args:
         vectorstore:
-        extract_collection_name: Name of MongoDB collection to fetch documents from
+        collection_name: Name of MongoDB collection to fetch documents from and store results in
         fetch_limit: Maximum number of documents to fetch
-        load_collection_name: Name of MongoDB collection to store results in
         content_quality_score_threshold: Minimum quality score for documents to be included
         retriever_type: Type of retriever to use for vector search
         embedding_model_id: Identifier for the embedding model
@@ -55,16 +54,17 @@ def compute_rag_vector_index(
         None
     """
     documents = read_documents_from_diskstorage(
-        collection_name=extract_collection_name, limit=fetch_limit
+        collection_name=collection_name, limit=fetch_limit, data_dir=data_dir
     )
 
-    documents = filter_by_quality(
+    documents_filtered = filter_by_quality(
         documents=documents,
         content_quality_score_threshold=content_quality_score_threshold,
     )
+    
     chunk_embed_load(
-        documents=documents,
-        collection_name=load_collection_name,
+        documents=documents_filtered,
+        collection_name=collection_name,
         processing_batch_size=processing_batch_size,
         processing_max_workers=processing_max_workers,
         retriever_type=retriever_type,
@@ -78,4 +78,5 @@ def compute_rag_vector_index(
         contextual_agent_max_characters=contextual_agent_max_characters,
         mock=mock,
         device=device,
+        data_dir=data_dir,
     )

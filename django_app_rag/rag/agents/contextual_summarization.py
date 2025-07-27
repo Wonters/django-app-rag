@@ -358,6 +358,7 @@ highlighting the most significant insights. Answer only with the succinct contex
         document = await self.__summarize(
             document=ContextualDocument(content=content), await_time_seconds=20
         )
+        logger.info(f"Summarized document: {document.contextual_summarization}")
 
         end_mem = process.memory_info().rss
         memory_diff = end_mem - start_mem

@@ -2,8 +2,8 @@ from pathlib import Path
 
 from zenml import pipeline
 
-from steps.generate_dataset import create_histograms, generate_summary_dataset
-from steps.infrastructure import (
+from ..steps.generate_dataset import create_histograms, generate_summary_dataset
+from ..steps.infrastructure import (
     read_documents_from_diskstorage,
     push_to_huggingface,
     save_dataset_to_disk,
@@ -12,7 +12,7 @@ from steps.infrastructure import (
 
 @pipeline
 def generate_dataset(
-    extract_collection_name: str,
+    collection_name: str,
     load_dataset_id: str,
     fetch_limit: int = 1000,
     summarization_agent_model_id: str = "gpt-4o-mini",
@@ -27,7 +27,7 @@ def generate_dataset(
     data_dir: Path = Path("data/"),
 ) -> None:
     documents = read_documents_from_diskstorage(
-        collection_name=extract_collection_name, limit=fetch_limit
+        collection_name=collection_name, limit=fetch_limit
     )
     create_histograms(documents)
 

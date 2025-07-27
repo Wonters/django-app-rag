@@ -1,5 +1,5 @@
 from smolagents import tool
-from django_app_rag.rag.agents.tools.mlflow_utils import mlflow_track
+from django_app_rag.rag.monitoring.mlflow import mlflow_track
 
 
 

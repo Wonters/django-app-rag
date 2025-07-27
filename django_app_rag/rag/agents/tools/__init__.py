@@ -8,8 +8,9 @@ from django_app_rag.rag.settings import settings
 
 from .summarizer import HuggingFaceEndpointSummarizerTool, OpenAISummarizerTool
 from .what_can_i_do import what_can_i_do
-from django_app_rag.rag.agents.tools.mlflow_utils import mlflow_track
+from django_app_rag.rag.monitoring.mlflow import mlflow_track
 from .diskstorage_retriever import DiskStorageRetrieverTool
+from .question_answer import QuestionAnswerTool
 
 def get_agent(retriever_config_path: Path) -> "AgentWrapper":
     agent = AgentWrapper.build_from_smolagents(
@@ -38,6 +39,8 @@ class AgentWrapper:
     @classmethod
     def build_from_smolagents(cls, retriever_config_path: Path) -> "AgentWrapper":
         retriever_tool = DiskStorageRetrieverTool(config_path=retriever_config_path)
+        question_answer_tool = QuestionAnswerTool(config_path=retriever_config_path)
+        
         if settings.USE_HUGGINGFACE_DEDICATED_ENDPOINT:
             logger.warning(
                 f"Using Hugging Face dedicated endpoint as the summarizer with URL: {settings.HUGGINGFACE_DEDICATED_ENDPOINT}"
@@ -56,7 +59,7 @@ class AgentWrapper:
         )
 
         agent = ToolCallingAgent(
-            tools=[what_can_i_do, retriever_tool, summarizer_tool],
+            tools=[what_can_i_do, retriever_tool, question_answer_tool, summarizer_tool],
             model=model,
             max_steps=3,
             verbosity_level=2,

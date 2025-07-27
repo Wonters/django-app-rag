@@ -1,0 +1,6 @@
+data_dir: data
+collection_name: collection_1
+to_s3: false
+max_workers: 10
+quality_agent_model_id: gpt-4o-mini
+quality_agent_mock: false 

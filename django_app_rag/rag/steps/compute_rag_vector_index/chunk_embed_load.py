@@ -24,6 +24,7 @@ from django_app_rag.rag.models import Collection
 
 DBINDEX = {"faiss": FaissDBIndex}
 
+MAX_CONCURRENT_REQUESTS = 10
 
 @step(enable_cache=False)
 def chunk_embed_load(
@@ -42,6 +43,7 @@ def chunk_embed_load(
     contextual_agent_max_characters: int | None = None,
     mock: bool = False,
     device: str = "cpu",
+    data_dir: str = None,
 ) -> None:
     """Process documents by chunking, embedding, and loading into MongoDB.
 
@@ -69,6 +71,7 @@ def chunk_embed_load(
         retriever_type=retriever_type,
         device=device,
         vectorstore=vectorstore,
+        persistent_path=data_dir,
     )
     splitter = get_splitter(
         chunk_size=chunk_size,
@@ -79,34 +82,30 @@ def chunk_embed_load(
         max_concurrent_requests=processing_max_workers,
     )
 
-    with DiskStorage(
-         model_class=Document, collection_name=collection_name
-    ) as storage:
-        #storage.clear_collection()
 
-        docs = [
-            LangChainDocument(
-                page_content=doc.content, metadata=doc.metadata.model_dump()
-            )
-            for doc in documents
-            if doc
-        ]
-        results = process_docs(
-            retriever,
-            docs,
-            splitter=splitter,
-            batch_size=processing_batch_size,
-            max_workers=processing_max_workers,
+    docs = [
+        LangChainDocument(
+            page_content=doc.content, metadata=doc.metadata.model_dump()
         )
-        logger.info(results)
+        for doc in documents
+        if doc
+    ]
+    logger.info(f"Processing {len(docs)} documents for chunk embedding")
+    process_docs(
+        retriever,
+        docs,
+        splitter=splitter,
+        batch_size=processing_batch_size,
+        max_workers=processing_max_workers,
+    )
 
-        index = DBINDEX[vectorstore](
-            retriever=retriever,
-        )
-        index.create(
-            embedding_dim=embedding_model_dim,
-            is_hybrid=retriever_type == "contextual",
-        )
+    index = DBINDEX[vectorstore](
+        retriever=retriever,
+    )
+    index.create(
+        embedding_dim=embedding_model_dim,
+        is_hybrid=retriever_type == "contextual",
+    )
 
 
 def process_docs(
@@ -116,10 +115,10 @@ def process_docs(
     batch_size: int = 4,
     max_workers: int = 2,
 ) -> list[None]:
-    """Process LangChain documents into MongoDB using thread pool.
+    """Process LangChain documents into Faiss using thread pool.
 
     Args:
-        retriever: MongoDB Atlas document retriever instance.
+        retriever: Faiss document retriever instance.
         docs: List of LangChain documents to process.
         splitter: Text splitter instance for chunking documents.
         batch_size: Number of documents to process in each batch.
@@ -160,6 +159,7 @@ def get_batches(
         Generator[list[LangChainDocument]]: Batches of documents of size batch_size.
     """
     for i in range(0, len(docs), batch_size):
+        logger.info(f"Batch {i} of {len(docs)}")
         yield docs[i : i + batch_size]
 
 
@@ -179,8 +179,16 @@ def process_batch(
         Exception: If there is an error processing the batch of documents.
     """
     try:
+        logger.info(f"Splitting {len(batch)} documents")
+        
+        # The splitter now handles parallelization internally
         split_docs = splitter.split_documents(batch)
-        retriever.add_documents(split_docs)
-        logger.info(f"Successfully processed {len(batch)} documents.")
+        
+        if split_docs:
+            retriever.add_documents(split_docs)
+            logger.info(f"Successfully processed {len(batch)} documents with {len(split_docs)} chunks.")
+        else:
+            logger.warning(f"No chunks generated for batch of {len(batch)} documents")
+            
     except Exception as e:
         logger.warning(f"Error processing batch of {len(batch)} documents: {str(e)}")

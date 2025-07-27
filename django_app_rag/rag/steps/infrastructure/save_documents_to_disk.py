@@ -15,8 +15,7 @@ def save_documents_to_disk(
         shutil.rmtree(output_dir)
     output_dir.mkdir(parents=True)
 
-    # Convertir les dictionnaires en objets Document
-    document_objects = []
+    # Sauvegarder chaque document
     for doc in documents:
         doc.write(output_dir=output_dir, obfuscate=True, also_save_as_txt=True)
 
@@ -24,7 +23,7 @@ def save_documents_to_disk(
     step_context.add_output_metadata(
         output_name="output",
         metadata={
-            "count": len(document_objects),
+            "count": len(documents),
             "output_dir": str(output_dir),
         },
     )

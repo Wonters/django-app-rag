@@ -1,7 +1,6 @@
 parameters:
-  extract_collection_name: raw
+  collection_name: raw
   fetch_limit: 200
-  load_collection_name: rag
   content_quality_score_threshold: 0.6
   retriever_type: parent
   embedding_model_id: sentence-transformers/all-MiniLM-L6-v2 #text-embedding-3-small

@@ -36,6 +36,33 @@
               </div>
               <div class="card-footer p-2 bg-transparent border-top-0">
                 <div class="d-flex justify-content-center gap-1">
+                  <!-- Bouton d'initialisation -->
+                  <button 
+                    class="btn btn-outline-primary btn-sm" 
+                    @click.stop="initializeCollection(collection)"
+                    :disabled="collection.initializationStatus === 'running' || collection.initializationStatus === 'pending'"
+                    :class="{
+                      'btn-outline-success': collection.initializationStatus === 'completed',
+                      'btn-outline-danger': collection.initializationStatus === 'failed' || collection.initializationStatus === 'error' || collection.initializationStatus === 'timeout',
+                      'btn-outline-warning': collection.initializationStatus === 'unknown'
+                    }"
+                    :title="$t('L\'installation va récupérer les données des différentes sources, effectuer des analyse de qualité et formater les données pour pouvoir les exploiter')"
+                    data-bs-toggle="tooltip"
+                    data-bs-placement="top"
+                  >
+                    <i v-if="collection.initializationStatus === 'running' || collection.initializationStatus === 'pending'" 
+                       class="fas fa-spinner fa-spin"></i>
+                    <i v-else-if="collection.initializationStatus === 'completed'" 
+                       class="fas fa-check"></i>
+                    <i v-else-if="collection.initializationStatus === 'failed' || collection.initializationStatus === 'error'" 
+                       class="fas fa-exclamation-triangle"></i>
+                    <i v-else-if="collection.initializationStatus === 'timeout'" 
+                       class="fas fa-clock"></i>
+                    <i v-else-if="collection.initializationStatus === 'unknown'" 
+                       class="fas fa-question"></i>
+                    <i v-else class="fas fa-play"></i>
+                  </button>
+                  
                   <button 
                     class="btn btn-outline-secondary btn-sm" 
                     @click.stop="$emit('edit', collection)" 
@@ -70,7 +97,10 @@
 </template>
 
 <script setup>
-defineProps({
+import { onMounted } from 'vue';
+import { launchCollectionInitialization } from '../services/tasks.js';
+
+const props = defineProps({
   collections: {
     type: Array,
     default: () => []
@@ -81,7 +111,38 @@ defineProps({
   }
 });
 
-defineEmits(['select', 'edit', 'delete', 'create']);
+const emit = defineEmits(['select', 'edit', 'delete', 'create']);
+
+// Fonction pour initialiser une collection
+const initializeCollection = (collection) => {
+  // Lancer la tâche d'initialisation
+  launchCollectionInitialization(
+    collection.id,
+    collection, // Passer la collection pour mettre à jour son état
+    null // Pas d'élément spécifique à mettre à jour
+  );
+};
+
+// Initialiser les tooltips Bootstrap
+onMounted(() => {
+  // Initialiser tous les tooltips
+  const tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
+  tooltipTriggerList.map(function (tooltipTriggerEl) {
+    return new bootstrap.Tooltip(tooltipTriggerEl);
+  });
+  
+  // Initialiser l'état d'initialisation des collections
+  initializeCollectionsStatus();
+});
+
+// Fonction pour initialiser l'état d'initialisation des collections
+const initializeCollectionsStatus = () => {
+  props.collections.forEach(collection => {
+    if (!collection.hasOwnProperty('initializationStatus')) {
+      collection.initializationStatus = 'idle';
+    }
+  });
+};
 </script>
 
 <style scoped>

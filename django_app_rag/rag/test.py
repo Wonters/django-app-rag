@@ -16,20 +16,28 @@ class TestRetriever:
             retriever_type="parent",
             k=3,
             device="cpu",
-            vectorstore="faiss"
+            vectorstore="faiss",
+            persistent_path="media/rag_data/1"
         )
     
     def teardown_method(self):
         self.retriever = None
 
     def test_disk_storage(self):
-        storage = DiskStorage(model_class=Document, collection_name="notion")
+        storage = DiskStorage(model_class=Document, collection_name="Low_Tech_1", data_dir="media/rag_data/1")
         documents = storage.read()
+        print(f"Documents: {documents}")
         assert len(documents) > 0
 
     def test_retriever(self):
         documents = self.retriever.invoke("Comment brancher les APSDS3 quelles puissances ? ")
         assert len(documents) > 0
+
+    def test_question_answer(self):
+        question = "Comment brancher les APSDS3 quelles puissances ? "
+        answer = self.retriever.question_answer(question)
+        print(f"Réponse: {answer}")
+        assert len(answer) > 0
 
     def test_index_faiss(self):
         print("=== Test avec invoke ===")

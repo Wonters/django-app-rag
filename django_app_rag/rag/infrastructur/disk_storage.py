@@ -10,11 +10,13 @@ class DiskStorage:
     """
     Storage class for saving and loading data to disk using msgpack serialization.
     """
-    storage_path: Path= Path("data") / "storage"
+    storage_path: Path 
     model_class: Type[BaseModel]
     collection_name: str
-    
-    def __init__(self,model_class: Type[BaseModel], collection_name: str):
+
+    def __init__(self,model_class: Type[BaseModel], collection_name: str, data_dir: str):
+        logger.info(f"Initializing DiskStorage for collection {collection_name} in {data_dir}")
+        self.storage_path = Path(data_dir) / "storage"
         self.storage_path.mkdir(parents=True, exist_ok=True)
         self.model_class = model_class
         self.collection_name = collection_name

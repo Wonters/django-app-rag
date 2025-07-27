@@ -14,6 +14,9 @@ from django_app_rag.logging import get_logger
 from django.urls import reverse
 import json
 from django.http import JsonResponse
+from .tasks.mixins import TaskViewMixin
+from .tasks.etl_tasks import initialize_collection_task
+
 logger = get_logger(__name__)
 
 class MainRAGTemplateView(TemplateView):
@@ -268,3 +271,63 @@ class QuestionFormView(CreateView):
         else:
             context['is_edit'] = False
         return context
+
+class ETLTaskView(APIView, TaskViewMixin):
+    """
+    Vue pour gérer les tâches ETL d'initialisation des collections
+    """
+    queue_name = "etl_tasks"
+    
+    def post(self, request, *args, **kwargs):
+        """
+        Lance une tâche d'initialisation pour une collection
+        """
+        collection_id = request.data.get('collection_id')
+        
+        if not collection_id:
+            return self._format_task_response(
+                status="failed",
+                message="ID de collection manquant",
+                task_id=None,
+                error="Le paramètre collection_id est requis",
+                http_status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        try:
+            # Vérifier que la collection existe
+            collection = Collection.objects.get(id=collection_id)
+        except Collection.DoesNotExist:
+            return self._format_task_response(
+                status="failed",
+                message="Collection non trouvée",
+                task_id=None,
+                error=f"Collection avec l'ID {collection_id} n'existe pas",
+                http_status=status.HTTP_404_NOT_FOUND
+            )
+        
+        # Lancer la tâche d'initialisation
+        return self.launch_task(
+            task_func=initialize_collection_task,
+            task_kwargs={
+                'collection_id': collection_id,
+            },
+            success_message=f"Tâche d'initialisation lancée pour la collection '{collection.title}'",
+            error_message="Erreur lors du lancement de la tâche d'initialisation"
+        )
+    
+    def get(self, request, *args, **kwargs):
+        """
+        Récupère le statut d'une tâche d'initialisation
+        """
+        task_id = request.query_params.get('task_id')
+        
+        if not task_id:
+            return self._format_task_response(
+                status="failed",
+                message="ID de tâche manquant",
+                task_id=None,
+                error="Le paramètre task_id est requis",
+                http_status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        return self.get_task_status(task_id, "Tâche d'initialisation")

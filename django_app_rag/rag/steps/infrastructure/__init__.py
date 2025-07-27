@@ -5,6 +5,8 @@ from .save_documents_to_disk import save_documents_to_disk
 from .upload_to_s3 import upload_to_s3
 from .save_to_diskstorage import save_to_diskstorage
 from .read_documents_from_diskstorage import read_documents_from_diskstorage
+from .combine_documents import combine_documents
+
 __all__ = [
     "upload_to_s3",
     "push_to_huggingface",
@@ -13,4 +15,5 @@ __all__ = [
     "read_documents_from_disk",
     "save_to_diskstorage",
     "read_documents_from_diskstorage",
+    "combine_documents",
 ]

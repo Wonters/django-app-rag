@@ -1,4 +1,5 @@
 import os.path
+from pathlib import Path
 from loguru import logger
 import faiss
 from typing import Any, Dict, List, Optional
@@ -25,8 +26,9 @@ class FaissParentDocumentRetriever(ParentDocumentRetriever):
         index_factory_str: str = "Flat",
         normalize_L2: bool = True,
         search_kwargs: Optional[Dict[str, Any]] = None,
-        persistent_path:str ="faiss_store/"
+        persistent_path:str ="data/"
     ):
+        persistent_path = Path(persistent_path) / "faiss_store"
         # VectorStore FAISS instanciation
         if os.path.exists(persistent_path):
             vectorstore = FAISS.load_local(persistent_path,
@@ -162,10 +164,8 @@ class FaissParentDocumentRetriever(ParentDocumentRetriever):
                     query, **self.search_kwargs
                 )
             )
-            logger.info(f"Scores: {[score for _, score in sub_docs_and_similarities]}")
             sub_docs = [sub_doc for sub_doc, _ in sub_docs_and_similarities]
         else:
             sub_docs = self.vectorstore.similarity_search(query, **self.search_kwargs)
-            logger.info(f"Sub_docs: {sub_docs}")
         # On retourne directement les documents trouvés par la recherche vectorielle
         return sub_docs

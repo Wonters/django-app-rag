@@ -4,7 +4,7 @@ import os
 import psutil
 from crawl4ai import AsyncWebCrawler, CacheMode
 from loguru import logger
-
+from django_app_rag.rag.utils import generate_random_hex
 from django_app_rag.rag.models import Document, DocumentMetadata
 
 
@@ -34,10 +34,9 @@ class Crawl4AICrawler:
         """
         try:
             loop = asyncio.get_running_loop()
+            return loop.run_until_complete(self.__crawl_batch(pages))
         except RuntimeError:
             return asyncio.run(self.__crawl_batch(pages))
-        else:
-            return loop.run_until_complete(self.__crawl_batch(pages))
 
     async def __crawl_batch(self, pages: list[Document]) -> list[Document]:
         """Asynchronously crawl all child URLs of multiple documents.
@@ -128,7 +127,7 @@ class Crawl4AICrawler:
             else:
                 title = ""
 
-            document_id = utils.generate_random_hex(length=32)
+            document_id = generate_random_hex(length=32)
 
             return Document(
                 id=document_id,
@@ -138,7 +137,12 @@ class Crawl4AICrawler:
                     title=title,
                     properties=result.metadata or {},
                 ),
-                parent_metadata=page.metadata,
+                parent_metadata=DocumentMetadata(
+                    id=page.metadata.id,
+                    url=page.metadata.url,
+                    title=page.metadata.title,
+                    properties=page.metadata.properties,
+                ),
                 content=str(result.markdown),
                 child_urls=child_links,
             )

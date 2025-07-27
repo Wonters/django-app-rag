@@ -16,7 +16,8 @@ def get_retriever(
     retriever_type: RetrieverType = "parent",
     k: int = 3,
     device: str = "cpu",
-    vectorstore: str = "faiss"
+    vectorstore: str = "faiss",
+    persistent_path: str = None
 ) -> RetrieverModel:
     logger.info(
         f"Getting '{retriever_type}' retriever for '{embedding_model_type}' - '{embedding_model_id}' on '{device}' "
@@ -28,20 +29,21 @@ def get_retriever(
     )
 
     try:
-        return RETRIEVER_TYPES[vectorstore][retriever_type](embedding_model, k)
+        return RETRIEVER_TYPES[vectorstore][retriever_type](embedding_model, k, persistent_path)
     except KeyError:
         raise ValueError(f"Invalid retriever type: {retriever_type}")
 
 
 
 def get_parent_document_retriever(
-    embedding_model: EmbeddingsModel, k: int = 3
+    embedding_model: EmbeddingsModel, k: int = 3, persistent_path: str = None
 ) -> FaissParentDocumentRetriever:
     retriever = FaissParentDocumentRetriever(
         embedding_model=embedding_model,
         child_splitter=get_splitter(200),
         parent_splitter=get_splitter(800),
         search_kwargs={"k": k},
+        persistent_path=persistent_path,
     )
 
     return retriever

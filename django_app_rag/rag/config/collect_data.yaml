@@ -1,0 +1,22 @@
+# Configuration unifiée pour la collecte de données depuis différentes sources
+# Fichiers locaux
+file_paths:
+  - "data/input/documents/document1.txt"
+  - "data/input/documents/document2.md"
+  - "data/input/documents/document3.pdf"
+
+# URLs web
+urls:
+  - "https://example.com/article1"
+  - "https://example.com/article2"
+  - "https://example.com/documentation"
+
+# Bases de données Notion
+notion_database_ids:
+  - "database_id_1"
+  - "database_id_2"
+
+# Configuration générale
+data_dir: "data"
+to_s3: false
+max_workers: 10 

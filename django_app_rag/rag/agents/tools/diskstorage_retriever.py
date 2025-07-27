@@ -3,7 +3,7 @@ from pathlib import Path
 import yaml
 from loguru import logger
 from smolagents import Tool
-from django_app_rag.rag.agents.tools.mlflow_utils import mlflow_track
+from django_app_rag.rag.monitoring.mlflow import mlflow_track
 from django_app_rag.rag.retrievers import get_retriever
 import mlflow
 
@@ -43,6 +43,7 @@ class DiskStorageRetrieverTool(Tool):
             retriever_type=config["retriever_type"],
             k=5,
             device=config["device"],
+            persistent_path=config["persistent_path"],
         )
 
     @mlflow_track(name="DiskStorageRetrieverTool.forward")

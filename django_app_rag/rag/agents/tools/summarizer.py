@@ -1,5 +1,5 @@
 from openai import OpenAI
-from django_app_rag.rag.agents.tools.mlflow_utils import mlflow_track
+from django_app_rag.rag.monitoring.mlflow import mlflow_track
 from smolagents import Tool
 
 from django_app_rag.rag.settings import settings

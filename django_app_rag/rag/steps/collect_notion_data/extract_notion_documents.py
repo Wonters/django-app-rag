@@ -8,14 +8,14 @@ from django_app_rag.rag.infrastructur.notion import NotionDocumentClient
 @step
 def extract_notion_documents(
     documents_metadata: list[dict],
-) -> Annotated[list[dict], "notion_documents"]:
+) -> Annotated[list[Document], "notion_documents"]:
     """Extract content from multiple Notion documents.
 
     Args:
         documents_metadata: List of document metadata dictionaries to extract content from.
 
     Returns:
-        list[dict]: List of document dictionaries with their extracted content.
+        list[Document]: List of Document objects with their extracted content.
     """
 
     client = NotionDocumentClient()
@@ -25,8 +25,8 @@ def extract_notion_documents(
     for metadata_dict in documents_metadata:
         document_metadata = DocumentMetadata.model_validate(metadata_dict)
         document = client.extract_document(document_metadata)
-        # Convertir l'objet Document en dictionnaire
-        documents.append(document.model_dump())
+        # Retourner directement l'objet Document
+        documents.append(document)
 
     step_context = get_step_context()
     step_context.add_output_metadata(

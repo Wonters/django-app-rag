@@ -54,16 +54,14 @@ def create_histograms(
     # Add a super title
     fig.suptitle("Document Analysis", fontsize=16, y=1.02)
 
-    # Adjust layout with more space
-    plt.tight_layout(pad=2.0)
+    # Adjust layout to prevent overlap
+    plt.tight_layout()
 
-    # Convert matplotlib figure to PIL Image with higher DPI
+    # Convert to PIL Image
     buf = BytesIO()
-    fig.savefig(buf, format="png", dpi=300, bbox_inches="tight")
+    plt.savefig(buf, format="png", dpi=300, bbox_inches="tight")
     buf.seek(0)
-    histogram_chart = Image.open(buf)
+    img = Image.open(buf)
+    plt.close()
 
-    # Close matplotlib figure to free memory
-    plt.close(fig)
-
-    return histogram_chart
+    return img

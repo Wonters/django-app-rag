@@ -14,26 +14,33 @@ def filter_by_quality(
 
     Args:
         documents: List of documents to process.
-        collection_name: Name of MongoDB collection to store documents.
-        processing_batch_size: Number of documents to process in each batch.
-        processing_max_workers: Maximum number of concurrent processing threads.
-        embedding_model_id: Identifier for the embedding model.
-        embedding_model_type: Type of embedding model to use.
-        embedding_model_dim: Dimension of the embedding vectors.
-        chunk_size: Size of text chunks for splitting documents.
-        device: Device to run embeddings on ('cpu' or 'cuda'). Defaults to 'cpu'.
+        content_quality_score_threshold: Minimum quality score threshold for filtering.
     """
 
     assert 0 <= content_quality_score_threshold <= 1, (
         "Content quality score threshold must be between 0 and 1"
     )
 
+    # Diagnostic logs
+    docs_with_score = [doc for doc in documents if doc.content_quality_score is not None]
+    docs_without_score = [doc for doc in documents if doc.content_quality_score is None]
+    
+    logger.info(f"Total documents: {len(documents)}")
+    logger.info(f"Documents with quality score: {len(docs_with_score)}")
+    logger.info(f"Documents without quality score: {len(docs_without_score)}")
+    
+    if docs_with_score:
+        scores = [doc.content_quality_score for doc in docs_with_score]
+        logger.info(f"Quality scores range: {min(scores):.3f} - {max(scores):.3f}")
+        logger.info(f"Threshold: {content_quality_score_threshold}")
+
     valid_docs = [
         doc
         for doc in documents
-        if not doc.content_quality_score
-        or doc.content_quality_score > content_quality_score_threshold
+        if doc.content_quality_score is not None
+        and doc.content_quality_score > content_quality_score_threshold
     ]
+    logger.info(f"Filtered {len(documents) - len(valid_docs)} documents")
 
     step_context = get_step_context()
     step_context.add_output_metadata(
