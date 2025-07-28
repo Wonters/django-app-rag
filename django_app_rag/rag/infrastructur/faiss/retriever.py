@@ -26,7 +26,8 @@ class FaissParentDocumentRetriever(ParentDocumentRetriever):
         index_factory_str: str = "Flat",
         normalize_L2: bool = True,
         search_kwargs: Optional[Dict[str, Any]] = None,
-        persistent_path:str ="data/"
+        persistent_path:str ="data/",
+        similarity_score_threshold: float = 0.5,
     ):
         persistent_path = Path(persistent_path) / "faiss_store"
         # VectorStore FAISS instanciation
@@ -61,6 +62,9 @@ class FaissParentDocumentRetriever(ParentDocumentRetriever):
             search_kwargs=search_kwargs or {},
         )
         self._persistent_path = persistent_path
+        self._similarity_score_threshold = similarity_score_threshold
+        if self._similarity_score_threshold is not None:
+            self.search_type = SearchType.similarity_score_threshold
 
     @classmethod
     def from_documents(
@@ -164,7 +168,14 @@ class FaissParentDocumentRetriever(ParentDocumentRetriever):
                     query, **self.search_kwargs
                 )
             )
-            sub_docs = [sub_doc for sub_doc, _ in sub_docs_and_similarities]
+            # Filter documents with similarity score > threshold and add score to metadata
+            filtered_docs = []
+            for doc, score in sub_docs_and_similarities:
+                if score > self._similarity_score_threshold:
+                    # Create a copy of the document with score in metadata
+                    doc.metadata["similarity_score"] = score
+                    filtered_docs.append(doc)
+            sub_docs = filtered_docs
         else:
             sub_docs = self.vectorstore.similarity_search(query, **self.search_kwargs)
         # On retourne directement les documents trouvés par la recherche vectorielle

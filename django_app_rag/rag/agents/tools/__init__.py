@@ -39,7 +39,7 @@ class AgentWrapper:
     @classmethod
     def build_from_smolagents(cls, retriever_config_path: Path) -> "AgentWrapper":
         retriever_tool = DiskStorageRetrieverTool(config_path=retriever_config_path)
-        question_answer_tool = QuestionAnswerTool(config_path=retriever_config_path)
+        question_answer_tool = QuestionAnswerTool()
         
         if settings.USE_HUGGINGFACE_DEDICATED_ENDPOINT:
             logger.warning(
@@ -63,13 +63,15 @@ class AgentWrapper:
             model=model,
             max_steps=3,
             verbosity_level=2,
+            return_full_result=True,
         )
 
         return cls(agent)
 
     @mlflow_track(name="Agent.run")
     def run(self, task: str, **kwargs) -> Any:
-        result = self.__agent.run(task, **kwargs)
+        full_result = self.__agent.run(task, **kwargs)
+        result = full_result.output
 
         model = self.__agent.model
         metadata = {
@@ -88,54 +90,45 @@ class AgentWrapper:
         mlflow.set_tags({"agent": True})
         mlflow.log_dict(metadata, "trace.json")
 
+        # Try to extract JSON output from QuestionAnswerTool from memory steps
+        json_output = self._extract_question_answer_json_from_steps()
+        if json_output:
+            return json_output
+
         return result
 
+    def _extract_question_answer_json_from_steps(self) -> Any:
+        """
+        Extract JSON output from QuestionAnswerTool from agent memory steps.
+        """
+        import json
+        
+        try:
+            print("🔍 Trying to extract QuestionAnswerTool response from memory steps...")
+            
+            # Look through all memory steps for QuestionAnswerTool observations
+            for step in self.__agent.memory.steps:
+                if hasattr(step, 'tool_calls') and step.tool_calls:
+                    for tool_call in step.tool_calls:
+                        if tool_call.name == "question_answer_tool":
+                            print(f"🔍 Found QuestionAnswerTool call in step")
+                            # The observation should be in the step's observations
+                            if hasattr(step, 'observations') and step.observations:
+                                print(f"🔍 Step observations: {step.observations[:200]}...")
+                                
+                                # Try to extract JSON from the observations
+                                json_output = step.observations
+                                if json_output:
+                                    logger.info("Found QuestionAnswerTool JSON output from memory steps")
+                                    return json_output
+                                else:
+                                    print("❌ No valid JSON found in step observations")
+            
+            print("❌ No QuestionAnswerTool found in memory steps")
+            return None
+            
+        except Exception as e:
+            logger.warning(f"Error extracting JSON from memory steps: {e}")
+            print(f"🔴 Error in _extract_question_answer_json_from_steps: {e}")
+            return None
 
-def extract_tool_responses(agent: ToolCallingAgent) -> str:
-    """
-    Extracts and concatenates all tool response contents with numbered observation delimiters.
-
-    Args:
-        input_messages (List[Dict]): List of message dictionaries containing 'role' and 'content' keys
-
-    Returns:
-        str: Tool response contents separated by numbered observation delimiters
-
-    Example:
-        >>> messages = [
-        ...     {"role": MessageRole.TOOL_RESPONSE, "content": "First response"},
-        ...     {"role": MessageRole.USER, "content": "Question"},
-        ...     {"role": MessageRole.TOOL_RESPONSE, "content": "Second response"}
-        ... ]
-        >>> extract_tool_responses(messages)
-        "-------- OBSERVATION 1 --------\nFirst response\n-------- OBSERVATION 2 --------\nSecond response"
-    """
-
-    tool_responses = [
-        msg["content"]
-        for msg in agent.input_messages
-        if msg["role"] == MessageRole.TOOL_RESPONSE
-    ]
-
-    return "\n".join(
-        f"-------- OBSERVATION {i + 1} --------\n{response}"
-        for i, response in enumerate(tool_responses)
-    )
-
-
-class OpikAgentMonitorCallback:
-    def __init__(self) -> None:
-        self.output_state: dict = {}
-
-    def __call__(self, step_log) -> None:
-        input_state = {
-            "agent_memory": step_log.agent_memory,
-            "tool_calls": step_log.tool_calls,
-        }
-        self.output_state = {"observations": step_log.observations}
-
-        self.trace(input_state)
-
-    @mlflow_track(name="Callback.agent_step")
-    def trace(self, step_log) -> dict:
-        return self.output_state

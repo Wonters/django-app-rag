@@ -35,7 +35,6 @@ class DiskStorageRetrieverTool(Tool):
 
     def __load_retriever(self, config_path: Path):
         config = yaml.safe_load(config_path.read_text())
-        config = config["parameters"]
 
         return get_retriever(
             embedding_model_id=config["embedding_model_id"],
@@ -43,7 +42,8 @@ class DiskStorageRetrieverTool(Tool):
             retriever_type=config["retriever_type"],
             k=5,
             device=config["device"],
-            persistent_path=config["persistent_path"],
+            persistent_path=config["data_dir"],
+            similarity_score_threshold=config.get("similarity_score_threshold", 0.5),
         )
 
     @mlflow_track(name="DiskStorageRetrieverTool.forward")
@@ -78,32 +78,45 @@ class DiskStorageRetrieverTool(Tool):
 
         try:
             query = self.__parse_query(query)
+            print(f"🔍 DiskStorageRetrieverTool - Searching for query: {query}")
+            
             relevant_docs = self.retriever.invoke(query)
+
+            # Log the number of documents found after filtering
+            logger.info(f"Found {len(relevant_docs)} documents with similarity score > {self.retriever._similarity_score_threshold * 100:.0f}%")
+            print(f"✅ DiskStorageRetrieverTool - Found {len(relevant_docs)} documents")
 
             formatted_docs = []
             for i, doc in enumerate(relevant_docs, 1):
-                formatted_docs.append(
-                    f"""
-<document id="{i}">
-<title>{doc.metadata.get("title")}</title>
-<url>{doc.metadata.get("url")}</url>
-<content>{doc.page_content.strip()}</content>
-</document>
-"""
-                )
+                # Get the similarity score if available
+                formatted_docs.append({
+                    "id": doc.metadata.get("id", f"Document {i}"),
+                    "title": doc.metadata.get("title", f"Document {i}"),
+                    "url": doc.metadata.get("url", "No URL available"),
+                    "score": doc.metadata.get("similarity_score", None),
+                    "content": doc.page_content.strip()
+                })
 
-            result = "\n".join(formatted_docs)
-            result = f"""
-<search_results>
-{result}
-</search_results>
-When using context from any document, also include the document URL as reference, which is found in the <url> tag.
-"""
-            return result
+            result = {
+                "documents": formatted_docs,
+                "total_count": len(formatted_docs),
+                "message": f"Found {len(formatted_docs)} relevant documents. When using context from any document, also include the document URL as reference."
+            }
+            
+            json_result = json.dumps(result, ensure_ascii=False)
+            print(f"✅ DiskStorageRetrieverTool - Returning JSON with {len(formatted_docs)} documents")
+            return json_result
         except Exception as e:
             logger.opt(exception=True).error(f"Error retrieving documents: {e}")
             
-            return "Error retrieving documents."
+            # Return structured JSON even in case of error for compatibility with question_answer_tool
+            error_result = {
+                "documents": [],
+                "total_count": 0,
+                "message": f"Error retrieving documents: {str(e)}"
+            }
+            
+            return json.dumps(error_result, ensure_ascii=False)
 
     @mlflow_track(name="DiskStorageRetrieverTool.parse_query")
     def __parse_query(self, query: str) -> str:
