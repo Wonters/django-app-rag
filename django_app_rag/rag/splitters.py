@@ -134,16 +134,36 @@ class HandlerRecursiveCharacterTextSplitter(RecursiveCharacterTextSplitter):
         logger.info(f"Splitting text {text_index} into {len(chunks)} chunks")
         documents = []
         
+        # Récupérer l'ID du document parent
+        parent_id = metadata.get("id", f"doc_{text_index}")
+        
         index = 0
         previous_chunk_len = 0
-        for chunk in chunks:
+        for chunk_index, chunk in enumerate(chunks):
             chunk_metadata = copy.deepcopy(metadata)
+            
+            # Générer un ID unique pour chaque chunk
+            chunk_id = f"{parent_id}_chunk_{chunk_index:03d}"
+            chunk_metadata["id"] = chunk_id
+            chunk_metadata["chunk_index"] = chunk_index
+            chunk_metadata["parent_id"] = parent_id
+            
             if self._add_start_index:
                 offset = index + previous_chunk_len - self._chunk_overlap
                 index = text.find(chunk, max(0, offset))
                 chunk_metadata["start_index"] = index
                 previous_chunk_len = len(chunk)
-            new_doc = LangChainDocument(page_content=chunk, metadata=chunk_metadata)
+            
+            # Créer le document avec l'ID unique
+            new_doc = LangChainDocument(
+                page_content=chunk, 
+                metadata=chunk_metadata
+            )
+            
+            # S'assurer que l'ID est bien défini
+            if hasattr(new_doc, 'metadata') and 'id' in new_doc.metadata:
+                logger.debug(f"Chunk créé: ID={new_doc.metadata['id']}, Parent={parent_id}, Index={chunk_index}")
+            
             documents.append(new_doc)
         
         return documents

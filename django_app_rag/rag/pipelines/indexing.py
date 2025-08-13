@@ -27,14 +27,14 @@ def compute_rag_vector_index(
     device: str = "cpu",
     data_dir: str = "data"
 ) -> None:
-    """Computes and stores RAG vector index from documents in MongoDB.
+    """Computes and stores RAG vector index from documents in DiskStorage.
 
-    This pipeline fetches documents from MongoDB, filters them by quality,
+    This pipeline fetches documents from DiskStorage, filters them by quality,
     chunks the content, computes embeddings, and stores the results.
 
     Args:
         vectorstore:
-        collection_name: Name of MongoDB collection to fetch documents from and store results in
+        collection_name: Name of DiskStorage collection to fetch documents from and store results in
         fetch_limit: Maximum number of documents to fetch
         content_quality_score_threshold: Minimum quality score for documents to be included
         retriever_type: Type of retriever to use for vector search

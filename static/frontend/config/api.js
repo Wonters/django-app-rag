@@ -19,6 +19,9 @@ export const QUESTION_API_URL = window.QUESTION_API_URL || '/api/questions/';
 export const QUESTION_FORM_URL = window.QUESTION_FORM_URL || '/questions/create/';
 export const QUESTION_EDIT_URL = window.QUESTION_EDIT_URL || '/questions/edit/';
 
+// URLs de l'analyse QA
+export const QA_API_URL = window.QA_API_URL || '/api/qa/';
+
 // Configuration générale
 export const API_CONFIG = {
   // URLs des collections
@@ -41,6 +44,11 @@ export const API_CONFIG = {
     api: QUESTION_API_URL,
     form: QUESTION_FORM_URL,
     edit: QUESTION_EDIT_URL
+  },
+  
+  // URLs de l'analyse QA
+  qa: {
+    api: QA_API_URL
   }
 };
 

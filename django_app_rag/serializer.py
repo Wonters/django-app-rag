@@ -1,5 +1,5 @@
 from rest_framework.serializers import ModelSerializer
-from .models import Source, Question, Answer, Collection
+from .models import Source, Question, Answer, Collection, Document
 from rest_framework import serializers
 
 class SourceSerializer(ModelSerializer):
@@ -15,20 +15,23 @@ class SourceSerializer(ModelSerializer):
     
     def get_answers_count(self, obj):
         return Answer.objects.filter(question__source=obj).count()
+    
 
-class QuestionSerializer(ModelSerializer):
+class DocumentSerializer(ModelSerializer):
     class Meta:
-        model = Question
-        fields = '__all__'
-
-class QuestionsSerializer(ModelSerializer):
-    class Meta:
-        model = Question
+        model = Document
         fields = '__all__'
 
 class AnswerSerializer(ModelSerializer):
+    documents = DocumentSerializer(many=True, read_only=True)
     class Meta:
         model = Answer
+        fields = '__all__'
+
+class QuestionSerializer(ModelSerializer):
+    answer = AnswerSerializer(read_only=True)
+    class Meta:
+        model = Question
         fields = '__all__'
 
 class CollectionSerializer(ModelSerializer):

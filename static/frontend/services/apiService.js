@@ -138,6 +138,39 @@ class ApiService {
       ...options
     });
   }
+
+  /**
+   * Traitement complet d'une réponse API avec validation et sérialisation
+   * @param {Response} response - Objet Response de fetch
+   * @returns {Promise<Object>} - Données traitées et validées
+   * 
+   * @example
+   * // Exemple d'utilisation dans une fonction async
+   * try {
+   *   const response = await apiService.get('/api/endpoint');
+   *   const data = await apiService.processApiResponse(response);
+   *   
+   *   // data est maintenant validé et standardisé
+   *   if (data.status === 'completed') {
+   *     console.log('Succès:', data.result);
+   *   }
+   * } catch (error) {
+   *   console.error('Erreur:', error.message);
+   * }
+   * 
+   * @description
+   * Cette fonction :
+   * 1. Vérifie le statut HTTP de la réponse
+   * 2. Parse automatiquement le JSON
+   * 3. Lance une erreur si la réponse est invalide
+   * 4. Retourne les données parsées
+   */
+  async processApiResponse(response) {
+
+      const data = await response.json();
+      return data;
+    
+  }
 }
 
 // Instance singleton

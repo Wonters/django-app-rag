@@ -1,6 +1,6 @@
 import click
 from smolagents import GradioUI
-from django_app_rag.rag.pipelines.compute_rag_vector_index import (
+from django_app_rag.rag.pipelines.indexing import (
     compute_rag_vector_index,
 )
 from django_app_rag.rag.pipelines.collect_data import collect_data
@@ -63,6 +63,32 @@ def etl(config):
         include_notion=cfg.get("include_notion", True),
         include_files=cfg.get("include_files", True),
         include_urls=cfg.get("include_urls", True),
+    )
+
+
+@cli.command()
+@click.option(
+    "--config",
+    type=click.Path(exists=True),
+    required=True,
+    help="Chemin du fichier de configuration YAML",
+)
+def etl_source(config):
+    """Traiter une source unique (fichier, URL ou Notion)"""
+    with open(config, "r") as f:
+        cfg = yaml.safe_load(f)
+    
+    from django_app_rag.rag.pipelines.etl_source import etl_single_source
+    
+    etl_single_source(
+        data_dir=Path(cfg["data_dir"]),
+        collection_name=cfg["collection_name"],
+        source_type=cfg["source_type"],
+        source_identifier=cfg["source_identifier"],
+        quality_agent_model_id=cfg["quality_agent_model_id"],
+        quality_agent_mock=cfg["quality_agent_mock"],
+        max_workers=cfg["max_workers"],
+        storage_mode=cfg.get("storage_mode", "append")
     )
 
 

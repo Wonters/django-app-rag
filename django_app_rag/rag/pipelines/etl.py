@@ -24,8 +24,22 @@ def etl_mixed(
     include_notion: bool = True,
     include_files: bool = True,
     include_urls: bool = True,
+    storage_mode: str = "overwrite",
 ) -> None:
-    """Pipeline ETL qui traite les données de Notion, fichiers et URLs."""
+    """Pipeline ETL qui traite les données de Notion, fichiers et URLs. Avec un crawler pour les URLs enfants et un agent de qualité.
+    
+    Args:
+        data_dir: Chemin vers le répertoire de données
+        collection_name: Nom de la collection
+        to_s3: Si True, les documents sont sauvegardés dans S3
+        max_workers: Nombre de workers pour le crawler
+        quality_agent_model_id: ID du modèle de qualité
+        quality_agent_mock: Si True, le modèle de qualité est mock
+        include_notion: Si True, les documents de Notion sont inclus
+        include_files: Si True, les documents de fichiers sont inclus
+        include_urls: Si True, les documents d'URLs sont inclus
+        storage_mode: Mode de stockage - "overwrite" (écrase tout) ou "append" (ajoute)
+    """
     
     notion_documents = None
     files_documents = None
@@ -80,19 +94,11 @@ def etl_mixed(
         mock=quality_agent_mock,
         max_workers=max_workers,
     )
-
-    # Sauvegarder les documents traités
-    crawled_data_dir = data_dir / "crawled"
-    logger.info(f"Saving processed data to {crawled_data_dir}")
     
-    save_documents_to_disk(documents=enhanced_documents, output_dir=crawled_data_dir)
-    
-    if to_s3:
-        upload_to_s3(
-            folder_path=crawled_data_dir,
-            s3_prefix="second_brain_course/crawled",
-            after="save_documents_to_disk",
-        )
-    
-    # Sauvegarder dans le stockage disque
-    save_to_diskstorage(documents=enhanced_documents, collection_name=collection_name, data_dir=data_dir.as_posix()) 
+    # Sauvegarder dans le stockage disque avec msgpack
+    save_to_diskstorage(
+        documents=enhanced_documents, 
+        collection_name=collection_name, 
+        data_dir=data_dir.as_posix(),
+        mode=storage_mode
+    ) 

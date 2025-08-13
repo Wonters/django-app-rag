@@ -1,429 +1,301 @@
+import apiService from './apiService.js';
+import { logger } from '../composables/useErrorHandler.js';
 
-// Fonction pour obtenir le cookie CSRF
-function getCookie(name) {
-    let cookieValue = null;
-    if (document.cookie && document.cookie !== '') {
-        const cookies = document.cookie.split(';');
-        for (let i = 0; i < cookies.length; i++) {
-            const cookie = cookies[i].trim();
-            if (cookie.substring(0, name.length + 1) === (name + '=')) {
-                cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
-                break;
-            }
-        }
-    }
-    return cookieValue;
-}
-
-// Fonction pour vérifier le statut d'une tâche d'upload
-function pollUploadStatus(taskId, downloadLink, originalText) {
-    const maxAttempts = 60; // 5 minutes max (60 * 5 secondes)
-    let attempts = 0;
-    
-    // Extraire l'ID du dataset depuis l'URL originale
-    const datasetIdMatch = downloadLink.href.match(/\/datasets\/(\d+)\/download/);
-    const datasetId = datasetIdMatch ? datasetIdMatch[1] : '1';
-    
-    const checkStatus = () => {
-        attempts++;
-        
-        // Utiliser l'URL de téléchargement avec le paramètre task_id
-        const statusUrl = `/ml_app/api/datasets/${datasetId}/download/?task_id=${taskId}`;
-        
-        fetch(statusUrl, {
-            method: 'GET',
-            headers: {
-                'X-CSRFToken': getCookie("csrftoken"),
-                'Accept': 'application/json'
-            }
-        })
-        .then(response => response.json())
-        .then(data => {
-            console.log('Upload status:', data);
-            
-            if (data.status === 'pending') {
-                downloadLink.innerHTML = '<i class="fas fa-clock"></i> En attente...';
-                if (attempts < maxAttempts) {
-                    setTimeout(checkStatus, 5000); // Vérifier toutes les 5 secondes
-                } else {
-                    alert('Timeout: La tâche d\'upload prend trop de temps');
-                    downloadLink.innerHTML = originalText;
-                    downloadLink.style.pointerEvents = 'auto';
-                }
-            } else if (data.status === 'running') {
-                downloadLink.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Upload en cours...';
-                if (attempts < maxAttempts) {
-                    setTimeout(checkStatus, 5000); // Vérifier toutes les 5 secondes
-                } else {
-                    alert('Timeout: La tâche d\'upload prend trop de temps');
-                    downloadLink.innerHTML = originalText;
-                    downloadLink.style.pointerEvents = 'auto';
-                }
-            } else if (data.status === 'completed') {
-                downloadLink.innerHTML = '<i class="fas fa-check"></i> Terminé';
-                setTimeout(() => {
-                    alert('Dataset uploadé avec succès vers S3 !');
-                    window.location.reload(); // Recharger la page pour mettre à jour l'état
-                }, 1000);
-            } else if (data.status === 'failed') {
-                downloadLink.innerHTML = originalText;
-                downloadLink.style.pointerEvents = 'auto';
-                alert('Erreur lors de l\'upload: ' + (data.error || 'Erreur inconnue'));
-            } else {
-                downloadLink.innerHTML = originalText;
-                downloadLink.style.pointerEvents = 'auto';
-                alert('Statut inconnu: ' + data.status);
-            }
-        })
-        .catch(error => {
-            console.error('Erreur lors de la vérification du statut:', error);
-            downloadLink.innerHTML = originalText;
-            downloadLink.style.pointerEvents = 'auto';
-            alert('Erreur lors de la vérification du statut de l\'upload');
-        });
-    };
-    
-    // Démarrer la vérification
-    checkStatus();
-}
-
-// Fonction générique pour vérifier le statut d'une tâche
-function pollTaskStatus(taskId, endpoint, element, originalText, taskName = "Tâche") {
-    const maxAttempts = 60; // 5 minutes max (60 * 5 secondes)
-    let attempts = 0;
-    
-    const checkStatus = () => {
-        attempts++;
-        
-        fetch(`${endpoint}?task_id=${taskId}`, {
-            method: 'GET',
-            headers: {
-                'X-CSRFToken': getCookie("csrftoken"),
-                'Accept': 'application/json'
-            }
-        })
-        .then(response => response.json())
-        .then(data => {
-            console.log(`${taskName} status:`, data);
-            
-            if (data.status === 'pending') {
-                if (element) {
-                    element.innerHTML = '<i class="fas fa-clock"></i> En attente...';
-                }
-                if (attempts < maxAttempts) {
-                    setTimeout(checkStatus, 5000);
-                } else {
-                    alert(`Timeout: La ${taskName.toLowerCase()} prend trop de temps`);
-                    if (element && originalText) {
-                        element.innerHTML = originalText;
-                        element.style.pointerEvents = 'auto';
-                    }
-                }
-            } else if (data.status === 'running') {
-                if (element) {
-                    element.innerHTML = '<i class="fas fa-spinner fa-spin"></i> En cours...';
-                }
-                if (attempts < maxAttempts) {
-                    setTimeout(checkStatus, 5000);
-                } else {
-                    alert(`Timeout: La ${taskName.toLowerCase()} prend trop de temps`);
-                    if (element && originalText) {
-                        element.innerHTML = originalText;
-                        element.style.pointerEvents = 'auto';
-                    }
-                }
-            } else if (data.status === 'completed') {
-                if (element) {
-                    element.innerHTML = '<i class="fas fa-check"></i> Terminé';
-                }
-                setTimeout(() => {
-                    alert(`${taskName} terminée avec succès !`);
-                    window.location.reload();
-                }, 1000);
-            } else if (data.status === 'failed') {
-                if (element && originalText) {
-                    element.innerHTML = originalText;
-                    element.style.pointerEvents = 'auto';
-                }
-                alert(`Erreur lors de la ${taskName.toLowerCase()}: ` + (data.error || 'Erreur inconnue'));
-            } else {
-                if (element && originalText) {
-                    element.innerHTML = originalText;
-                    element.style.pointerEvents = 'auto';
-                }
-                alert('Statut inconnu: ' + data.status);
-            }
-        })
-        .catch(error => {
-            console.error(`Erreur lors de la vérification du statut de la ${taskName.toLowerCase()}:`, error);
-            if (element && originalText) {
-                element.innerHTML = originalText;
-                element.style.pointerEvents = 'auto';
-            }
-            alert(`Erreur lors de la vérification du statut de la ${taskName.toLowerCase()}`);
-        });
-    };
-    
-    // Démarrer la vérification
-    checkStatus();
-}
-
-// Fonction pour lancer une tâche et gérer le polling
-function launchTaskAndPoll(taskEndpoint, taskData, element, originalText, taskName = "Tâche") {
-    // Changer l'état de l'élément pour indiquer le lancement
-    if (element) {
-        element.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Lancement...';
-        element.style.pointerEvents = 'none';
-    }
-    
-    fetch(taskEndpoint, {
-        method: 'POST',
-        headers: {
-            'X-CSRFToken': getCookie("csrftoken"),
-            'Content-Type': 'application/json',
-            'Accept': 'application/json'
-        },
-        body: JSON.stringify(taskData)
-    })
-    .then(response => response.json())
-    .then(data => {
-        if (data.status === 'pending' && data.task_id) {
-            // Tâche lancée, commencer le polling
-            alert(`${taskName} lancée ! Vérification du statut...`);
-            pollTaskStatus(data.task_id, taskEndpoint, element, originalText, taskName);
-        } else if (data.error) {
-            // Erreur lors du lancement
-            alert(`Erreur lors du lancement de la ${taskName.toLowerCase()}: ` + data.error);
-            if (element && originalText) {
-                element.innerHTML = originalText;
-                element.style.pointerEvents = 'auto';
-            }
-        } else {
-            // Autre cas
-            alert(`Réponse inattendue: ${JSON.stringify(data)}`);
-            if (element && originalText) {
-                element.innerHTML = originalText;
-                element.style.pointerEvents = 'auto';
-            }
-        }
-    })
-    .catch(error => {
-        console.error(`Erreur lors du lancement de la ${taskName.toLowerCase()}:`, error);
-        alert(`Erreur lors du lancement de la ${taskName.toLowerCase()}`);
-        if (element && originalText) {
-            element.innerHTML = originalText;
-            element.style.pointerEvents = 'auto';
-        }
-    });
-}
-
-// Fonction spécifique pour lancer une tâche d'initialisation de collection
-function launchCollectionInitialization(collectionId, collection, originalText) {
-    const taskEndpoint = '/rag_app/api/etl/';
-    const taskData = {
-        collection_id: collectionId
-    };
-    
-    // Marquer la collection comme en cours d'initialisation
-    if (collection) {
-        collection.initializationStatus = 'pending';
-    }
-    
-    // Changer l'état de l'élément pour indiquer le lancement
-    if (originalText) {
-        originalText.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Lancement...';
-        originalText.style.pointerEvents = 'none';
-    }
-    
-    fetch(taskEndpoint, {
-        method: 'POST',
-        headers: {
-            'X-CSRFToken': getCookie("csrftoken"),
-            'Content-Type': 'application/json',
-            'Accept': 'application/json'
-        },
-        body: JSON.stringify(taskData)
-    })
-    .then(response => response.json())
-    .then(data => {
-        if (data.status === 'pending' && data.task_id) {
-            // Tâche lancée, commencer le polling
-            console.log('Tâche d\'initialisation lancée ! Vérification du statut...');
-            pollInitializationStatus(data.task_id, collection, originalText);
-        } else if (data.error) {
-            // Erreur lors du lancement
-            console.error('Erreur lors du lancement de la tâche d\'initialisation:', data.error);
-            if (collection) {
-                collection.initializationStatus = 'failed';
-            }
-            if (originalText) {
-                originalText.innerHTML = '<i class="fas fa-exclamation-triangle"></i> Erreur';
-                originalText.style.pointerEvents = 'auto';
-            }
-            alert('Erreur lors du lancement de la tâche d\'initialisation: ' + data.error);
-        } else {
-            // Autre cas
-            console.error('Réponse inattendue:', data);
-            if (collection) {
-                collection.initializationStatus = 'failed';
-            }
-            if (originalText) {
-                originalText.innerHTML = '<i class="fas fa-exclamation-triangle"></i> Erreur';
-                originalText.style.pointerEvents = 'auto';
-            }
-            alert('Réponse inattendue lors du lancement de la tâche');
-        }
-    })
-    .catch(error => {
-        console.error('Erreur lors du lancement de la tâche d\'initialisation:', error);
-        if (collection) {
-            collection.initializationStatus = 'failed';
-        }
-        if (originalText) {
-            originalText.innerHTML = '<i class="fas fa-exclamation-triangle"></i> Erreur';
-            originalText.style.pointerEvents = 'auto';
-        }
-        alert('Erreur lors du lancement de la tâche d\'initialisation');
-    });
-}
-
-// Fonction pour vérifier le statut d'une tâche d'initialisation
-function pollInitializationStatus(taskId, collection, originalText) {
-    const taskEndpoint = '/rag_app/api/etl/';
-    const maxAttempts = 60; // 5 minutes max (60 * 5 secondes)
-    let attempts = 0;
-    
-    const checkStatus = () => {
-        attempts++;
-        
-        fetch(`${taskEndpoint}?task_id=${taskId}`, {
-            method: 'GET',
-            headers: {
-                'X-CSRFToken': getCookie("csrftoken"),
-                'Accept': 'application/json'
-            }
-        })
-        .then(response => response.json())
-        .then(data => {
-            console.log('Statut de la tâche d\'initialisation:', data);
-            
-            if (data.status === 'pending') {
-                if (collection) {
-                    collection.initializationStatus = 'pending';
-                }
-                if (attempts < maxAttempts) {
-                    setTimeout(checkStatus, 5000);
-                } else {
-                    console.error('Timeout: La tâche d\'initialisation prend trop de temps');
-                    if (collection) {
-                        collection.initializationStatus = 'timeout';
-                    }
-                    if (originalText) {
-                        originalText.innerHTML = '<i class="fas fa-clock"></i> Timeout';
-                        originalText.style.pointerEvents = 'auto';
-                    }
-                    alert('Timeout: La tâche d\'initialisation prend trop de temps');
-                }
-            } else if (data.status === 'running') {
-                if (collection) {
-                    collection.initializationStatus = 'running';
-                }
-                if (attempts < maxAttempts) {
-                    setTimeout(checkStatus, 5000);
-                } else {
-                    console.error('Timeout: La tâche d\'initialisation prend trop de temps');
-                    if (collection) {
-                        collection.initializationStatus = 'timeout';
-                    }
-                    if (originalText) {
-                        originalText.innerHTML = '<i class="fas fa-clock"></i> Timeout';
-                        originalText.style.pointerEvents = 'auto';
-                    }
-                    alert('Timeout: La tâche d\'initialisation prend trop de temps');
-                }
-            } else if (data.status === 'completed') {
-                if (collection) {
-                    collection.initializationStatus = 'completed';
-                }
-                if (originalText) {
-                    originalText.innerHTML = '<i class="fas fa-check"></i> Terminé';
-                    originalText.style.pointerEvents = 'auto';
-                }
-                setTimeout(() => {
-                    alert('Initialisation de la collection terminée avec succès !');
-                    window.location.reload();
-                }, 1000);
-            } else if (data.status === 'failed') {
-                if (collection) {
-                    collection.initializationStatus = 'failed';
-                }
-                if (originalText) {
-                    originalText.innerHTML = '<i class="fas fa-exclamation-triangle"></i> Erreur';
-                    originalText.style.pointerEvents = 'auto';
-                }
-                alert('Erreur lors de l\'initialisation: ' + (data.error || 'Erreur inconnue'));
-            } else {
-                if (collection) {
-                    collection.initializationStatus = 'unknown';
-                }
-                if (originalText) {
-                    originalText.innerHTML = '<i class="fas fa-question"></i> Inconnu';
-                    originalText.style.pointerEvents = 'auto';
-                }
-                alert('Statut inconnu: ' + data.status);
-            }
-        })
-        .catch(error => {
-            console.error('Erreur lors de la vérification du statut de l\'initialisation:', error);
-            if (collection) {
-                collection.initializationStatus = 'error';
-            }
-            if (originalText) {
-                originalText.innerHTML = '<i class="fas fa-exclamation-triangle"></i> Erreur';
-                originalText.style.pointerEvents = 'auto';
-            }
-            alert('Erreur lors de la vérification du statut de l\'initialisation');
-        });
-    };
-    
-    // Démarrer la vérification
-    checkStatus();
-}
-
-export {
-    getCookie,
-    pollUploadStatus,
-    pollTaskStatus,
-    launchTaskAndPoll,
-    launchCollectionInitialization,
-    pollInitializationStatus
-}; 
 /**
- * Handle standardized API responses
- * @param {Object} data - Response data with standardized format
- * @param {string} data.status - Response status
- * @param {string} data.message - Response message
- * @param {string} data.task_id - Task identifier
- * @param {string} data.error - Error message (if applicable)
- * @param {Object} data.result - Result data (if applicable)
- * @returns {Object} - Processed response object
+ * Configuration par défaut pour le polling
  */
-export function handleStandardizedResponse(data) {
-    const response = {
-        status: data.status,
-        message: data.message,
-        task_id: data.task_id,
-        error: data.error,
-        result: data.result,
-        isValid: true
+const DEFAULT_POLLING_CONFIG = {
+    maxAttempts: 60, // 5 minutes max (60 * 5 secondes)
+    interval: 5000,  // Vérifier toutes les 5 secondes
+    timeoutMessage: 'La tâche prend trop de temps'
+};
+
+/**
+ * Fonction générique pour lancer une tâche
+ * @param {string} endpoint - Endpoint de l'API pour lancer la tâche
+ * @param {Object} taskData - Données de la tâche
+ * @param {Object} options - Options de configuration
+ * @returns {Promise<Object>} - Promise résolue avec la réponse de lancement
+ */
+export async function launchTask(endpoint, taskData, options = {}) {
+    try {
+        const response = await apiService.post(endpoint, taskData);
+        const data = await apiService.processApiResponse(response);
+
+        if (data.status === 'pending' && data.task_id) {
+            return {
+                success: true,
+                taskId: data.task_id,
+                status: data.status,
+                message: data.message || 'Tâche lancée avec succès'
+            };
+        } else if (data.error) {
+            throw new Error(data.error);
+        } else {
+            throw new Error('Réponse inattendue lors du lancement de la tâche');
+        }
+    } catch (error) {
+        throw new Error(`Erreur lors du lancement de la tâche: ${error.message}`);
+    }
+}
+
+/**
+ * Fonction générique pour le polling du statut d'une tâche
+ * @param {string} taskId - ID de la tâche
+ * @param {string} endpoint - Endpoint pour vérifier le statut
+ * @param {Object} options - Options de configuration
+ * @param {Function} options.onStatusUpdate - Callback appelé à chaque mise à jour du statut
+ * @param {Function} options.onSuccess - Callback appelé en cas de succès
+ * @param {Function} options.onError - Callback appelé en cas d'erreur
+ * @param {Function} options.onComplete - Callback appelé à la fin (succès ou échec)
+ * @param {number} options.maxAttempts - Nombre maximum de tentatives
+ * @param {number} options.interval - Intervalle entre les vérifications en ms
+ * @param {string} options.timeoutMessage - Message de timeout personnalisé
+ * @returns {Promise<Object>} - Promise résolue avec le résultat final
+ */
+export async function pollTaskStatus(taskId, endpoint, options = {}) {
+    const config = { ...DEFAULT_POLLING_CONFIG, ...options };
+    const {
+        onStatusUpdate = () => { },
+        onSuccess = () => { },
+        onError = () => { },
+        onComplete = () => { },
+        maxAttempts,
+        interval,
+        timeoutMessage
+    } = config;
+
+    let attempts = 0;
+
+    return new Promise((resolve, reject) => {
+        const checkStatus = async () => {
+            try {
+                attempts++;
+
+                const response = await apiService.get(`${endpoint}?task_id=${taskId}`);
+                console.log('response', response);
+                const data = await apiService.processApiResponse(response);
+                console.log('data', data);
+
+                // Appeler le callback de mise à jour du statut
+                onStatusUpdate(data.status, data);
+
+                if (data.status === 'completed') {
+                    // Tâche terminée avec succès
+                    logger.log('Tâche terminée avec succès:', data);
+                    onSuccess(data);
+                    onComplete('completed', data);
+                    resolve({ status: 'completed', data });
+
+                } else if (data.status === 'failed') {
+                    // Tâche échouée
+                    const error = new Error(data.error.message || 'Erreur lors de l\'exécution de la tâche');
+                    logger.error('Tâche échouée:', error);
+                    onError(error, data);
+                    onComplete('failed', data);
+                    reject(error);
+
+                } else if (data.status === 'running' || data.status === 'pending') {
+                    // Tâche en cours, continuer le polling
+                    if (attempts < maxAttempts) {
+                        setTimeout(checkStatus, interval);
+                    } else {
+                        // Timeout
+                        const timeoutError = new Error(timeoutMessage);
+                        logger.warn('Timeout de la tâche:', timeoutError.message);
+                        onError(timeoutError, data);
+                        onComplete('timeout', data);
+                        reject(timeoutError);
+                    }
+
+                } else {
+                    // Statut inconnu
+                    const unknownError = new Error(`Statut inconnu: ${data.status}`);
+                    logger.error('Statut inconnu de la tâche:', unknownError.message);
+                    onError(unknownError, data);
+                    onComplete('unknown', data);
+                    reject(unknownError);
+                }
+
+            } catch (error) {
+                onError(error);
+                onComplete('error', null);
+                reject(error);
+            }
+        };
+
+        // Démarrer le polling
+        checkStatus();
+    });
+}
+
+/**
+ * Fonction pour lancer et surveiller une tâche complète
+ * @param {string} endpoint - Endpoint de l'API
+ * @param {Object} taskData - Données de la tâche
+ * @param {Object} options - Options de configuration
+ * @returns {Promise<Object>} - Promise résolue avec le résultat final
+ */
+export async function launchTaskAndPoll(endpoint, taskData, options = {}) {
+    try {
+        // Lancer la tâche
+        const launchResult = await launchTask(endpoint, taskData, options);
+
+        // Commencer le polling
+        const result = await pollTaskStatus(launchResult.taskId, endpoint, options);
+
+        return {
+            ...launchResult,
+            finalResult: result
+        };
+    } catch (error) {
+        throw error;
+    }
+}
+
+/**
+ * Fonction spécifique pour lancer l'initialisation d'une collection
+ * @param {number} collectionId - ID de la collection
+ * @param {Object} options - Options de configuration
+ * @param {Function} options.onStatusUpdate - Callback pour les mises à jour de statut
+ * @param {Function} options.onSuccess - Callback en cas de succès
+ * @param {Function} options.onError - Callback en cas d'erreur
+ * @param {Function} options.onComplete - Callback à la fin
+ * @returns {Promise<Object>} - Promise résolue avec le résultat
+ */
+export async function launchCollectionInitialization(collectionId, options = {}) {
+    const endpoint = '/rag_app/api/etl/';
+    const taskData = { collection_id: collectionId };
+
+    const defaultCallbacks = {
+        onStatusUpdate: (status, data) => {
+            logger.log(`Initialisation de la collection ${collectionId}: ${status}`);
+        },
+        onSuccess: (data) => {
+            logger.log('Initialisation de la collection terminée avec succès');
+            // Pas de reload automatique, laisser le composant décider
+        },
+        onError: (error, data) => {
+            logger.error('Erreur lors de l\'initialisation:', error);
+            // Pas d'alert automatique, laisser le composant décider
+        },
+        onComplete: (finalStatus, data) => {
+            logger.log('Initialisation terminée avec le statut:', finalStatus);
+        }
     };
-    
+
+    const callbacks = { ...defaultCallbacks, ...options };
+
+    return launchTaskAndPoll(endpoint, taskData, {
+        ...options,
+        ...callbacks,
+        timeoutMessage: 'L\'initialisation de la collection prend trop de temps'
+    });
+}
+
+/**
+ * Fonction spécifique pour lancer l'analyse QA d'une source
+ * @param {Object} source - L'objet source à analyser
+ * @param {string} qaApiUrl - URL de l'API QA
+ * @param {Object} options - Options de configuration
+ * @param {Function} options.onStatusUpdate - Callback pour les mises à jour de statut
+ * @param {Function} options.onSuccess - Callback en cas de succès
+ * @param {Function} options.onError - Callback en cas d'erreur
+ * @param {Function} options.onComplete - Callback à la fin
+ * @returns {Promise<Object>} - Promise résolue avec le résultat
+ */
+export async function launchQAAnalysis(source, qaApiUrl, options = {}) {
+    const taskData = { source_id: source.id };
+
+    const defaultCallbacks = {
+        onStatusUpdate: (status, data) => {
+            // Mettre à jour le statut de la source
+            if (source) {
+                source.qa_status = status;
+            }
+            logger.log(`Analyse QA de la source ${source.id}: ${status}`);
+        },
+        onSuccess: (data) => {
+            logger.log('Analyse QA terminée avec succès');
+            if (source) {
+                source.qa_status = 'completed';
+            }
+            // Pas de reload automatique, laisser le composant décider
+        },
+        onError: (error, data) => {
+            logger.error('Erreur lors de l\'analyse QA:', error);
+            if (source) {
+                source.qa_status = 'failed';
+            }
+            // Pas d'alert automatique, laisser le composant décider
+        },
+        onComplete: (finalStatus, data) => {
+            logger.log('Analyse QA terminée pour la source', source.id, 'avec le statut:', finalStatus);
+        }
+    };
+
+    const callbacks = { ...defaultCallbacks, ...options };
+
+    return launchTaskAndPoll(qaApiUrl, taskData, {
+        ...options,
+        ...callbacks,
+        timeoutMessage: 'L\'analyse QA prend trop de temps'
+    });
+}
+
+/**
+ * Gestionnaire de réponses API standardisées pour les tâches
+ * @param {Object} data - Données de réponse avec format standardisé
+ * @returns {Object} - Objet de réponse traité
+ * 
+ * @example
+ * // Exemple d'utilisation avec une réponse API
+ * const apiResponse = {
+ *   status: 'completed',
+ *   task_id: '12345',
+ *   result: { data: 'success' },
+ *   message: 'Tâche terminée'
+ * };
+ * 
+ * const standardized = handleStandardizedTaskResponse(apiResponse);
+ * if (standardized.isValid) {
+ *   console.log('Statut:', standardized.status);
+ *   console.log('Résultat:', standardized.result);
+ * } else {
+ *   console.error('Erreur:', standardized.error);
+ * }
+ */
+export function handleStandardizedTaskResponse(data) {
+    // Vérification que data est un objet valide
+    if (!data || typeof data !== 'object') {
+        return {
+            status: 'unknown',
+            message: 'Réponse invalide: données non-object',
+            task_id: null,
+            error: 'Format de réponse invalide',
+            result: null,
+            isValid: false,
+            rawData: data
+        };
+    }
+
+    const response = {
+        status: data.status || 'unknown',
+        message: data.message || null,
+        task_id: data.task_id || null,
+        error: data.error || null,
+        result: data.result || null,
+        isValid: true,
+        rawData: data
+    };
+
     // Validation de base
     if (!data.status) {
         response.isValid = false;
         response.error = 'Format de réponse invalide: statut manquant';
+        return response;
     }
-    
+
     // Validation selon le statut
     switch (data.status) {
         case 'pending':
@@ -436,7 +308,7 @@ export function handleStandardizedResponse(data) {
         case 'completed':
             if (!data.task_id && !data.result) {
                 response.isValid = false;
-                response.error = 'ID de tâche manquant pour le statut: ' + data.status;
+                response.error = 'ID de tâche ou résultat manquant pour le statut: ' + data.status;
             }
             break;
         case 'failed':
@@ -452,9 +324,13 @@ export function handleStandardizedResponse(data) {
             }
             break;
         default:
-            response.isValid = false;
-            response.error = 'Statut inconnu: ' + data.status;
+            // Pour les statuts personnalisés, on accepte mais on marque comme potentiellement non-standard
+            response.isValid = true;
+            response.warning = 'Statut non-standard détecté: ' + data.status;
     }
-    
+
     return response;
 }
+
+
+

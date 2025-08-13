@@ -52,9 +52,34 @@ def add_quality_score(
     quality_agent = QualityScoreAgent(
         model_id=model_id, mock=mock, max_concurrent_requests=max_workers
     )
-    scored_documents_with_agents: list[Document] = quality_agent(
-        documents_without_scores
-    )
+    
+    try:
+        scored_documents_with_agents: list[Document] = quality_agent(
+            documents_without_scores
+        )
+    except Exception as e:
+        logger.error(f"Error during quality scoring with agent: {e}")
+        # Fallback: assign default scores to documents that couldn't be scored
+        scored_documents_with_agents = []
+        for doc in documents_without_scores:
+            try:
+                # Assign a default score based on content length and URL ratio
+                if len(doc.content) == 0:
+                    scored_doc = doc.add_quality_score(score=0.0)
+                elif len(doc.child_urls) > 0:
+                    url_ratio = sum(len(url) for url in doc.child_urls) / len(doc.content)
+                    if url_ratio >= 0.7:
+                        scored_doc = doc.add_quality_score(score=0.1)
+                    elif url_ratio >= 0.5:
+                        scored_doc = doc.add_quality_score(score=0.3)
+                    else:
+                        scored_doc = doc.add_quality_score(score=0.6)
+                else:
+                    scored_doc = doc.add_quality_score(score=0.7)
+                scored_documents_with_agents.append(scored_doc)
+            except Exception as doc_error:
+                logger.warning(f"Could not assign fallback score to document {doc.id}: {doc_error}")
+                scored_documents_with_agents.append(doc)
 
     scored_documents: list[Document] = (
         scored_documents_with_heuristics + scored_documents_with_agents

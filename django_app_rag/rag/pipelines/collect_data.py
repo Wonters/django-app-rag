@@ -13,7 +13,7 @@ from ..steps.collect_notion_data import (
 from ..steps.infrastructure import save_documents_to_disk, upload_to_s3
 
 
-@pipeline
+@pipeline(enable_cache=False)
 def collect_data(
     data_dir: Path,
     file_paths: Optional[list[Path]] = None,

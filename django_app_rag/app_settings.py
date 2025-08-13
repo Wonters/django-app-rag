@@ -1,3 +1,6 @@
+from django.conf import settings
+from pathlib import Path
+
 class AppRAGConfig:
     """
     Configuration centrale pour l'application django_app_rag.
@@ -13,6 +16,10 @@ class AppRAGConfig:
         """
         from django.conf import settings
         return getattr(settings, self.prefix + name, dflt)
+
+    @property
+    def rag_data_dir(self):
+        return self._setting('RAG_DATA_DIR', settings.MEDIA_ROOT / "rag_data")
     
     @property
     def frontend_dev_server(self):
@@ -29,8 +36,6 @@ class AppRAGConfig:
     @property
     def templates_dir(self):
         """Base templates directory for django-app-rag"""
-        from django.conf import settings
-        from pathlib import Path
         return self._setting('APP_RAG_TEMPLATES_DIR', 
                            Path(settings.BASE_DIR) / "django-app-rag/django_app_rag/templates")
     

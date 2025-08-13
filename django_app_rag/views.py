@@ -3,19 +3,16 @@ from rest_framework.response import Response
 from rest_framework import status
 from django.views.generic import TemplateView
 from django.conf import settings
-from rest_framework.generics import ListAPIView
 from rest_framework.viewsets import ModelViewSet
 from .models import Question, Collection
 from .serializer import SourceSerializer, QuestionSerializer, CollectionSerializer
-from django.views.generic.edit import FormView, CreateView, UpdateView
+from django.views.generic.edit import FormView, CreateView
 from .models import Source
 from .forms import SourceForm, QuestionForm, CollectionForm
 from django_app_rag.logging import get_logger
-from django.urls import reverse
-import json
-from django.http import JsonResponse
 from .tasks.mixins import TaskViewMixin
-from .tasks.etl_tasks import initialize_collection_task
+from .tasks.etl_tasks import indexing_collection_task, indexing_source_task
+from pathlib import Path
 
 logger = get_logger(__name__)
 
@@ -116,7 +113,7 @@ class QuestionModelViewSet(ModelViewSet):
     
     def get_queryset(self):
         queryset = Question.objects.all()
-        source_id = self.request.query_params.get('source', None)
+        source_id = self.request.query_params.get('source_id', None)
         if source_id is not None:
             queryset = queryset.filter(source_id=source_id)
         return queryset
@@ -281,16 +278,41 @@ class ETLTaskView(APIView, TaskViewMixin):
     def post(self, request, *args, **kwargs):
         """
         Lance une tâche d'initialisation pour une collection
+        Si source_id est fourni, traite uniquement cette source
         """
         collection_id = request.data.get('collection_id')
+        source_id = request.data.get('source_id')
         
-        if not collection_id:
+        if not collection_id and not source_id:
             return self._format_task_response(
                 status="failed",
                 message="ID de collection manquant",
                 task_id=None,
-                error="Le paramètre collection_id est requis",
+                error="Le paramètre collection_id ou source_id est requis",
                 http_status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # Si source_id est fourni, traiter uniquement cette source
+        if source_id:
+            try:
+                source = Source.objects.get(id=source_id)
+            except Source.DoesNotExist:
+                return self._format_task_response(
+                    status="failed",
+                    message="Source non trouvée",
+                    task_id=None,
+                    error=f"Source avec l'ID {source_id} n'existe pas dans cette collection",
+                    http_status=status.HTTP_404_NOT_FOUND
+                )
+            
+            # Lancer la tâche avec la configuration temporaire
+            return self.launch_task(
+                task_func=indexing_source_task,
+                task_kwargs={
+                    'source_id': source_id,
+                },
+                success_message=f"Tâche d'indexation lancée pour la source '{source.title}' de la collection '{source.collection.title}'",
+                error_message="Erreur lors du lancement de la tâche d'indexation de la source"
             )
         
         try:
@@ -305,9 +327,9 @@ class ETLTaskView(APIView, TaskViewMixin):
                 http_status=status.HTTP_404_NOT_FOUND
             )
         
-        # Lancer la tâche d'initialisation
+        # Sinon, lancer la tâche d'initialisation complète
         return self.launch_task(
-            task_func=initialize_collection_task,
+            task_func=indexing_collection_task,
             task_kwargs={
                 'collection_id': collection_id,
             },
@@ -331,3 +353,101 @@ class ETLTaskView(APIView, TaskViewMixin):
             )
         
         return self.get_task_status(task_id, "Tâche d'initialisation")
+
+class LaunchQAView(APIView, TaskViewMixin):
+    """
+    Vue pour lancer le processus de Question/Réponse sur une source
+    """
+    queue_name = "rag_tasks"
+    
+    def post(self, request, *args, **kwargs):
+        """
+        Lance le processus QA pour une source
+        """
+        source_id = request.data.get('source_id')
+        
+        if not source_id:
+            return self._format_task_response(
+                status="failed",
+                message="ID de source manquant",
+                task_id=None,
+                error="Le paramètre source_id est requis",
+                http_status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        try:
+            # Vérifier que la source existe
+            source = Source.objects.get(id=source_id)
+            
+            # Vérifier que la source a des questions
+            if not source.questions.exists():
+                return self._format_task_response(
+                    status="failed",
+                    message="Aucune question trouvée",
+                    task_id=None,
+                    error=f"La source '{source.title}' n'a pas de questions à traiter",
+                    http_status=status.HTTP_400_BAD_REQUEST
+                )
+                
+        except Source.DoesNotExist:
+            return self._format_task_response(
+                status="failed",
+                message="Source non trouvée",
+                task_id=None,
+                error=f"Source avec l'ID {source_id} n'existe pas",
+                http_status=status.HTTP_404_NOT_FOUND
+            )
+        
+        # Récupérer la configuration depuis la collection
+        collection = source.collection
+        if not collection:
+            return self._format_task_response(
+                status="failed",
+                message="Collection manquante",
+                task_id=None,
+                error="La source doit être associée à une collection",
+                http_status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # Construire le chemin vers le fichier de configuration de la collection
+        config_path = collection.rag_index_config()
+        
+        # Vérifier que le fichier de configuration existe
+        if not Path(config_path).exists():
+            return self._format_task_response(
+                status="failed",
+                message="Configuration manquante",
+                task_id=None,
+                error=f"Le fichier de configuration pour la collection '{collection.title}' n'existe pas",
+                http_status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # Lancer la tâche QA
+        from .tasks.rag_tasks import launch_qa_process
+        
+        return self.launch_task(
+            task_func=launch_qa_process,
+            task_kwargs={
+                'source_id': source_id,
+                'config_path': config_path,
+            },
+            success_message=f"Processus QA lancé pour la source '{source.title}'",
+            error_message="Erreur lors du lancement du processus QA"
+        )
+    
+    def get(self, request, *args, **kwargs):
+        """
+        Récupère le statut d'un processus QA
+        """
+        task_id = request.query_params.get('task_id')
+        
+        if not task_id:
+            return self._format_task_response(
+                status="failed",
+                message="ID de tâche manquant",
+                task_id=None,
+                error="Le paramètre task_id est requis",
+                http_status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        return self.get_task_status(task_id, "Processus QA")

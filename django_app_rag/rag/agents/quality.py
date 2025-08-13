@@ -47,14 +47,28 @@ Analyze the text thoroughly and assign a quality score between 0 and 1, where:
 - **0.1 - 0.7**: The DOCUMENT is partially relevant containing some relevant information checking partially guidelines
 - **0.8 - 1.0**: The DOCUMENT is entirely relevant containing all relevant information following the guidelines
 
-It is crucial that you return only the score in the following JSON format:
+CRITICAL: You MUST return ONLY a valid JSON object with this exact format:
 {{
     "score": <your score between 0.0 and 1.0>
 }}
 
+Examples of valid responses:
+{{
+    "score": 0.8
+}}
+
+{{
+    "score": 0.3
+}}
+
+{{
+    "score": 1.0
+}}
+
+Do NOT include any other text, explanations, or formatting. ONLY the JSON object.
+
 DOCUMENT:
-{document}
-"""
+{document}"""
 
     def __init__(
         self,
@@ -202,12 +216,16 @@ DOCUMENT:
                 )
 
             try:
-                response = await acompletion(
-                    model=self.model_id,
-                    messages=[
-                        {"role": "user", "content": input_user_prompt},
-                    ],
-                    stream=False,
+                # Add timeout to prevent hanging
+                response = await asyncio.wait_for(
+                    acompletion(
+                        model=self.model_id,
+                        messages=[
+                            {"role": "user", "content": input_user_prompt},
+                        ],
+                        stream=False,
+                    ),
+                    timeout=30.0  # 30 second timeout
                 )
                 await asyncio.sleep(await_time_seconds)  # Rate limiting
 
@@ -228,9 +246,11 @@ DOCUMENT:
                 return document.add_quality_score(
                     score=quality_score.score,
                 )
+            except asyncio.TimeoutError:
+                logger.warning(f"Timeout while scoring document {document.id}")
+                return document
             except Exception as e:
                 logger.warning(f"Failed to score document {document.id}: {str(e)}")
-
                 return document
 
         if semaphore:
@@ -245,12 +265,50 @@ DOCUMENT:
         if not answer:
             return None
 
+        # Log the raw answer for debugging
+        logger.debug(f"Raw model answer: {answer[:200]}...")
+
         try:
+            # First try direct JSON parsing
             dict_content = json.loads(answer)
             return QualityScoreResponseFormat(
                 score=dict_content["score"],
             )
-        except Exception:
+        except json.JSONDecodeError as e:
+            logger.debug(f"JSON parsing failed: {e}")
+            
+            # Try to extract JSON from the response if it's wrapped in text
+            try:
+                # Look for JSON-like content between curly braces
+                import re
+                json_match = re.search(r'\{[^{}]*"score"[^{}]*\}', answer)
+                if json_match:
+                    json_str = json_match.group(0)
+                    logger.debug(f"Extracted JSON string: {json_str}")
+                    dict_content = json.loads(json_str)
+                    return QualityScoreResponseFormat(
+                        score=dict_content["score"],
+                    )
+            except Exception as extract_error:
+                logger.debug(f"JSON extraction failed: {extract_error}")
+            
+            # Try to find a number that could be a score
+            try:
+                import re
+                # Look for numbers between 0 and 1 (scores)
+                score_match = re.search(r'\b(0\.\d+|[01]\.0)\b', answer)
+                if score_match:
+                    score_value = float(score_match.group(0))
+                    logger.info(f"Extracted score from text: {score_value}")
+                    return QualityScoreResponseFormat(score=score_value)
+            except Exception as score_error:
+                logger.debug(f"Score extraction failed: {score_error}")
+            
+            # If all else fails, return None
+            logger.warning(f"Could not parse quality score from answer: {answer[:100]}...")
+            return None
+        except Exception as e:
+            logger.warning(f"Unexpected error parsing model output: {e}")
             return None
 
 

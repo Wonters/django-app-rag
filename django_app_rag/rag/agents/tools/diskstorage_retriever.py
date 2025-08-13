@@ -6,6 +6,7 @@ from smolagents import Tool
 from django_app_rag.rag.monitoring.mlflow import mlflow_track
 from django_app_rag.rag.retrievers import get_retriever
 import mlflow
+import numpy as np
 
 
 class DiskStorageRetrieverTool(Tool):
@@ -32,6 +33,21 @@ class DiskStorageRetrieverTool(Tool):
 
         self.config_path = config_path
         self.retriever = self.__load_retriever(config_path)
+
+    def _convert_numpy_types(self, obj):
+        """Convert numpy types to Python types for JSON serialization."""
+        if isinstance(obj, np.integer):
+            return int(obj)
+        elif isinstance(obj, np.floating):
+            return float(obj)
+        elif isinstance(obj, np.ndarray):
+            return obj.tolist()
+        elif isinstance(obj, dict):
+            return {key: self._convert_numpy_types(value) for key, value in obj.items()}
+        elif isinstance(obj, list):
+            return [self._convert_numpy_types(item) for item in obj]
+        else:
+            return obj
 
     def __load_retriever(self, config_path: Path):
         config = yaml.safe_load(config_path.read_text())
@@ -70,7 +86,7 @@ class DiskStorageRetrieverTool(Tool):
         mlflow.set_tags({"agent": True})
         mlflow.log_dict(
             {
-                "search": search_kwargs,
+                "search": self._convert_numpy_types(search_kwargs),
                 "embedding_model_id": self.retriever.vectorstore.embeddings.model_name,
             },
             "trace.json",
@@ -83,18 +99,36 @@ class DiskStorageRetrieverTool(Tool):
             relevant_docs = self.retriever.invoke(query)
 
             # Log the number of documents found after filtering
-            logger.info(f"Found {len(relevant_docs)} documents with similarity score > {self.retriever._similarity_score_threshold * 100:.0f}%")
+            threshold = self._convert_numpy_types(self.retriever._similarity_score_threshold)
+            logger.info(f"Found {len(relevant_docs)} documents with similarity score > {threshold * 100:.0f}%")
             print(f"✅ DiskStorageRetrieverTool - Found {len(relevant_docs)} documents")
 
             formatted_docs = []
             for i, doc in enumerate(relevant_docs, 1):
-                # Get the similarity score if available
+                # Convert all metadata values to ensure JSON serialization compatibility
+                metadata = self._convert_numpy_types(doc.metadata)
+                
+                # Extraire les informations de groupement des chunks
+                chunk_info = {}
+                if metadata.get("is_unique_chunk") is not None:
+                    chunk_info = {
+                        "is_unique_chunk": metadata.get("is_unique_chunk"),
+                        "content_hash": metadata.get("content_hash"),
+                        "chunk_length": metadata.get("chunk_length"),
+                        "chunk_preview": metadata.get("chunk_preview")
+                    }
+                    
+                    # Si c'est un doublon, ajouter l'information
+                    if not metadata.get("is_unique_chunk"):
+                        chunk_info["duplicate_of"] = metadata.get("duplicate_of")
+                
                 formatted_docs.append({
-                    "id": doc.metadata.get("id", f"Document {i}"),
-                    "title": doc.metadata.get("title", f"Document {i}"),
-                    "url": doc.metadata.get("url", "No URL available"),
-                    "score": doc.metadata.get("similarity_score", None),
-                    "content": doc.page_content.strip()
+                    "id": metadata.get("id", f"Document {i}"),
+                    "title": metadata.get("title", f"Document {i}"),
+                    "url": metadata.get("url", "No URL available"),
+                    "score": metadata.get("similarity_score", metadata.get("best_similarity_score")),
+                    "content": doc.page_content.strip(),
+                    "chunk_info": chunk_info
                 })
 
             result = {

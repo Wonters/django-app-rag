@@ -1,3 +1,3 @@
-from .indexes import FaissDBIndex
+from .retriever import FaissParentDocumentRetriever
 
-__all__ = ["FaissDBIndex"]
+__all__ = ["FaissParentDocumentRetriever"]

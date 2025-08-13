@@ -25,5 +25,6 @@
     window.QUESTION_FORM_URL = "{% url 'django_app_rag:question-add' %}";
     window.QUESTION_EDIT_URL = "{% url 'django_app_rag:question-edit' pk='__pk__' %}";
     window.QUESTION_API_URL = "{% url 'django_app_rag:questions-list' %}";
-  </script>
+    window.QA_API_URL = "{% url 'django_app_rag:qa-task' %}";
+</script>
 {% endblock %}

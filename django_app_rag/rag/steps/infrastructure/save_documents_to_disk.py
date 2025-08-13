@@ -14,6 +14,8 @@ def save_documents_to_disk(
     if output_dir.exists():
         shutil.rmtree(output_dir)
     output_dir.mkdir(parents=True)
+    for file in output_dir.glob("*"):
+        file.unlink()
 
     # Sauvegarder chaque document
     for doc in documents:

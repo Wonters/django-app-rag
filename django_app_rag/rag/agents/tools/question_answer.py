@@ -10,6 +10,8 @@ from openai import OpenAI
 import mlflow
 
 
+
+
 class QuestionAnswerTool(Tool):
     name = "question_answer_tool"
     description = """Use this tool to answer questions by processing retrieved documents and providing a concise answer with source citations.
@@ -37,6 +39,7 @@ class QuestionAnswerTool(Tool):
         }
     }
     output_type = "string"
+    not_found_answer = "Aucun documents"
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
@@ -99,13 +102,33 @@ class QuestionAnswerTool(Tool):
             context_parts = []
             
             for i, doc in enumerate(documents_with_content, 1):
-                sources.append({
+                # Extraire les informations de groupement des chunks
+                chunk_info = doc.get("chunk_info", {})
+                
+                source_info = {
                     "id": doc.get("id", f"Document {i}"),
                     "title": doc.get("title", f"Document {i}"),
                     "url": doc.get("url", "No URL available"),
                     "similarity_score": doc.get("score")
-                })
+                }
                 
+                # Ajouter les informations de groupement si disponibles
+                if chunk_info:
+                    source_info.update({
+                        "is_unique_chunk": chunk_info.get("is_unique_chunk"),
+                        "chunk_length": chunk_info.get("chunk_length"),
+                        "chunk_preview": chunk_info.get("chunk_preview")
+                    })
+                    
+                    print(f"🔍 QuestionAnswerTool - Document {i}: {doc.get('title', '')[:50]}...")
+                    print(f"   📊 Score: {doc.get('score')}")
+                    print(f"   📏 Longueur du chunk: {chunk_info.get('chunk_length')} caractères")
+                    print(f"   📝 Aperçu: {chunk_info.get('chunk_preview', '')[:80]}...")
+                    
+                    if not chunk_info.get("is_unique_chunk"):
+                        print(f"   ⚠️  Doublon détecté: {chunk_info.get('duplicate_of')}")
+                
+                sources.append(source_info)
                 context_parts.append(doc.get("content", ""))
 
             # Create context for answer generation
@@ -120,11 +143,11 @@ class QuestionAnswerTool(Tool):
             print(f"✅ QuestionAnswerTool - Generated answer: {answer[:100]}...")
             
             # Return JSON response
-            response = [{
+            response = {
                 "answer": answer,
                 "question_id": str(uuid.uuid4()),
                 "sources": sources
-            }]
+            }
             
             print(f"✅ QuestionAnswerTool - Returning response with {len(sources)} sources")
             
@@ -166,7 +189,7 @@ class QuestionAnswerTool(Tool):
                 print(f"🔍 QuestionAnswerTool - Found {len(documents)} documents in JSON")
                 
                 for doc in documents:
-                    print(f"🔍 QuestionAnswerTool - Parsed document {doc.get('id')}: {doc.get('title', '')[:50]}...")
+                    print(f"🔍 QuestionAnswerTool - Parsed document {doc.get('id')} (score {doc.get('score')}): {doc.get('title', '')[:50]}...")
             else:
                 print("❌ QuestionAnswerTool - No 'documents' key found in JSON response")
                 
@@ -185,7 +208,7 @@ class QuestionAnswerTool(Tool):
                     print(f"🔍 QuestionAnswerTool - Found {len(documents)} documents after cleaning Python dict")
                     
                     for doc in documents:
-                        print(f"🔍 QuestionAnswerTool - Parsed document {doc.get('id')}: {doc.get('title', '')[:50]}...")
+                        print(f"🔍 QuestionAnswerTool - Parsed documents {doc.get('id')} (score {doc.get('score')}): {doc.get('title', '')[:50]}...")
                 else:
                     print("❌ QuestionAnswerTool - No 'documents' key found in cleaned data")
                     # Fallback: try to extract any text content
@@ -241,9 +264,9 @@ class QuestionAnswerTool(Tool):
         Context from retrieved documents:
         {context}
         
-        Based on the context above, provide a concise and accurate answer to the question. 
+        Based on the context above, provide a concise, short and accurate answer to the question. 
         The answer should be clear, factual, and directly address the question.
-        Keep the answer brief but informative.
+        Keep the answer brief but informative. The answer should be less than 100 words.
         
         If the documents do not contain relevant information to answer the question, respond with "Aucun documents".
         
@@ -263,7 +286,7 @@ class QuestionAnswerTool(Tool):
             # Check if the answer indicates no relevant information
             if "aucun document" in answer.lower() or "no relevant" in answer.lower() or "cannot answer" in answer.lower():
                 print("❌ QuestionAnswerTool - LLM indicated no relevant information")
-                return "Aucun documents"
+                return self.not_found_answer
             
             print(f"✅ QuestionAnswerTool - Generated answer successfully")
             return answer

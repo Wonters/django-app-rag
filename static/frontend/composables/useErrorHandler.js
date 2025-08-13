@@ -1,6 +1,16 @@
 import { ref } from 'vue';
 import { useI18n } from 'vue-i18n';
 
+// Configuration
+const isDev = process.env.NODE_ENV === 'development';
+
+// Logger conditionnel - maintenant exporté directement
+export const logger = {
+  log: (...args) => isDev && console.log(...args),
+  warn: (...args) => isDev && console.warn(...args),
+  error: (...args) => console.error(...args) // Toujours log les erreurs
+};
+
 export function useErrorHandler() {
   const { t } = useI18n();
   
@@ -15,16 +25,6 @@ export function useErrorHandler() {
     onConfirm: null,
     onCancel: null
   });
-
-  // Configuration
-  const isDev = process.env.NODE_ENV === 'development';
-  
-  // Logger conditionnel
-  const logger = {
-    log: (...args) => isDev && console.log(...args),
-    warn: (...args) => isDev && console.warn(...args),
-    error: (...args) => console.error(...args) // Toujours log les erreurs
-  };
 
   /**
    * Afficher une notification toast

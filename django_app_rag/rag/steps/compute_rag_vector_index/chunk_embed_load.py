@@ -1,13 +1,10 @@
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Any, Generator
-
 from langchain_core.documents import Document as LangChainDocument
-
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from loguru import logger
 from tqdm import tqdm
 from zenml.steps import step
-from pathlib import Path
 from django_app_rag.rag.retrievers import (
     EmbeddingModelType,
     get_retriever,
@@ -15,14 +12,6 @@ from django_app_rag.rag.retrievers import (
     RetrieverType,
 )
 from django_app_rag.rag.splitters import SummarizationType
-from django_app_rag.rag.models import Document
-from django_app_rag.rag.settings import settings
-
-from django_app_rag.rag.infrastructur.faiss import FaissDBIndex
-from django_app_rag.rag.infrastructur.disk_storage import DiskStorage
-from django_app_rag.rag.models import Collection
-
-DBINDEX = {"faiss": FaissDBIndex}
 
 MAX_CONCURRENT_REQUESTS = 10
 
@@ -99,13 +88,6 @@ def chunk_embed_load(
         max_workers=processing_max_workers,
     )
 
-    index = DBINDEX[vectorstore](
-        retriever=retriever,
-    )
-    index.create(
-        embedding_dim=embedding_model_dim,
-        is_hybrid=retriever_type == "contextual",
-    )
 
 
 def process_docs(

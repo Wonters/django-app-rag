@@ -81,9 +81,13 @@ class AgentWrapper:
             "tools": self.__agent.tools,
             "model_id": self.__agent.model.model_id,
             "api_base": self.__agent.model.api_base,
-            "input_token_count": model.last_input_token_count,
-            "output_token_count": model.last_output_token_count,
         }
+        
+        # Add token counts if available
+        if hasattr(model, 'last_input_token_count'):
+            metadata["input_token_count"] = model.last_input_token_count
+        if hasattr(model, 'last_output_token_count'):
+            metadata["output_token_count"] = model.last_output_token_count
         if hasattr(self.__agent, "step_number"):
             metadata["step_number"] = self.__agent.step_number
         import mlflow
