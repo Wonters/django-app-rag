@@ -31,7 +31,8 @@ def extract_url_documents(
             id=document_id,
             url=url,
             title="",  # Sera rempli par le crawler
-            properties={"source_url": url}
+            source_type="url",
+            properties={"url": url}
         )
         
         temp_document = Document(

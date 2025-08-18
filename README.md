@@ -46,6 +46,23 @@ django-app-rag/
    python manage.py migrate
    ```
 
+## Installation des dépendances supplémentaires
+1. **Installer PyTorch CPU**
+   ```bash
+   pip install --index-url https://download.pytorch.org/whl/cpu torch==2.4.1 --no-cache-dir
+   ```
+
+2. **Installer Tesseract OCR**
+   ```bash
+   apt-get update && apt-get install -y tesseract-ocr tesseract-ocr-eng libtesseract-dev
+   export TESSDATA_PREFIX=/usr/share/tesseract-ocr/5/tessdata/
+   ```
+
+3. **Installer docling**
+   ```bash
+   pip install docling
+   ```
+
 ## Installation frontend
 1. **Aller dans le dossier static**
    ```bash

@@ -44,6 +44,7 @@ class NotionDocumentClient:
                 id=parent_metadata["id"],
                 url=parent_metadata["url"],
                 title=parent_metadata["title"],
+                source_type="notion",
                 properties=parent_metadata["properties"],
             )
 

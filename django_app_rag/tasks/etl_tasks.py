@@ -112,7 +112,7 @@ def indexing_source_task(source_id: int, storage_mode: str = "append"):
             raise ValueError(f"Type de source non supporté: {source.type}")
         
         # Lancer le pipeline ETL pour source unique via run.py
-        run_rag_process(SCRIPT_PATH, "etl_source", collection.rag_etl_source_config(source_type, source_identifier, storage_mode))
+        run_rag_process(SCRIPT_PATH, "etl-source", collection.rag_etl_source_config(source_type, source_identifier, storage_mode))
         
         # Mettre à jour le timestamp d'indexation
         source.is_indexed_at = timezone.now()

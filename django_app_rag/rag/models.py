@@ -5,6 +5,7 @@ from pydantic import BaseModel, Field
 from datasets import Dataset, DatasetDict
 from loguru import logger
 from django_app_rag.rag import utils
+from typing import Literal
 
 
 class DocumentMetadata(BaseModel):
@@ -12,6 +13,7 @@ class DocumentMetadata(BaseModel):
     url: str
     title: str
     properties: dict
+    source_type: Literal["notion", "url", "file"] = Field(description="Type de source du document")
 
     def obfuscate(self) -> "DocumentMetadata":
         """Create an obfuscated version of this metadata by modifying in place.

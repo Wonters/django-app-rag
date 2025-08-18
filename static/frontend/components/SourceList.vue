@@ -80,17 +80,10 @@
                     data-bs-toggle="tooltip"
                     data-bs-placement="top"
                   >
-                    <!-- Spinner pour running -->
-                    <span v-if="source.qa_status === 'running'" class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
-                    
-                    <!-- Icône pour pending -->
-                    <i v-else-if="source.qa_status === 'pending'" class="bi bi-clock"></i>
-                    
-                    <!-- Icône warning pour failed -->
-                    <i v-else-if="source.qa_status === 'failed'" class="bi bi-exclamation-triangle"></i>
-                    
-                    <!-- Icône robot pour completed ou pas de statut -->
-                    <i v-else class="bi bi-robot"></i>
+                    <ButtonSpinner 
+                      :status="source.qa_status" 
+                      default-icon-class="bi bi-robot"
+                    />
                   </button>
                   
                   <!-- Bouton d'indexation de la source -->
@@ -108,17 +101,10 @@
                     data-bs-toggle="tooltip"
                     data-bs-placement="top"
                   >
-                    <!-- Spinner pour running -->
-                    <span v-if="source.indexing_status === 'running'" class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
-                    
-                    <!-- Icône pour pending -->
-                    <i v-else-if="source.indexing_status === 'pending'" class="bi bi-clock"></i>
-                    
-                    <!-- Icône warning pour failed -->
-                    <i v-else-if="source.indexing_status === 'failed'" class="bi bi-exclamation-triangle"></i>
-                    
-                    <!-- Icône database pour completed ou pas de statut -->
-                    <i v-else class="bi bi-database"></i>
+                    <ButtonSpinner 
+                      :status="source.indexing_status" 
+                      default-icon-class="bi bi-database"
+                    />
                   </button>
                 </div>
               </td>
@@ -145,6 +131,7 @@ import { useI18n } from 'vue-i18n';
 import SourceForm from './SourceForm.vue';
 import NotificationToast from './NotificationToast.vue';
 import ConfirmationModal from './ConfirmationModal.vue';
+import ButtonSpinner from './ButtonSpinner.vue';
 import apiService from '../services/apiService.js';
 import { launchQAAnalysis } from '../services/tasks.js';
 import { useErrorHandler } from '../composables/useErrorHandler.js';

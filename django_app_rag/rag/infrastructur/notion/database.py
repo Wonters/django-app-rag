@@ -120,7 +120,11 @@ class NotionDatabaseClient:
             }
 
         return DocumentMetadata(
-            id=page["id"], url=page["url"], title=title, properties=properties
+            id=page["id"], 
+            url=page["url"], 
+            title=title, 
+            source_type="notion",
+            properties=properties
         )
 
     def __flatten_properties(self, properties: dict) -> dict:
