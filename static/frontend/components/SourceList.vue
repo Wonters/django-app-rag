@@ -7,29 +7,23 @@
           <i class="bi bi-plus-lg"></i> {{ $t('Ajouter un document') }}
         </button>
       </div>
-      
+
       <!-- Formulaire d'ajout -->
-      <SourceForm :show="showUpload" :form-url="sourceFormUrl" @close="closeUploadForm" @success="handleSourceSuccess" />
-      
+      <SourceForm :show="showUpload" :form-url="sourceFormUrl" @close="closeUploadForm"
+        @success="handleSourceSuccess" />
+
       <!-- Formulaire d'édition -->
       <SourceForm :show="showEdit" :form-url="editFormUrl" @close="closeEditForm" @success="handleSourceSuccess" />
-      
+
       <!-- Notifications toast -->
-      <NotificationToast 
-        :notifications="notifications"
-        @remove="removeNotification"
-      />
-      
+      <NotificationToast :notifications="notifications" @remove="removeNotification" />
+
       <!-- Modale de confirmation -->
-      <ConfirmationModal 
-        :confirmation-modal="confirmationModal"
-        @confirm="handleConfirm"
-        @cancel="handleCancel"
-      />
-      
+      <ConfirmationModal :confirmation-modal="confirmationModal" @confirm="handleConfirm" @cancel="handleCancel" />
+
       <!-- Tableau des documents -->
       <div class="table-responsive">
-        <table class="table table-striped table-hover">
+        <table ref="tableRef" class="table table-striped table-hover">
           <thead class="table-dark">
             <tr>
               <th>{{ $t('ID', 2) }}</th>
@@ -37,6 +31,8 @@
               <th>{{ $t('Type', 2) }}</th>
               <th>{{ $t('Questions', 2) }}</th>
               <th>{{ $t('Answers', 2) }}</th>
+              <th>{{ $t('Indexé', 2) }}</th>
+              <th>{{ $t('Analyse', 2) }}</th>
               <th>{{ $t('Actions', 2) }}</th>
             </tr>
           </thead>
@@ -56,6 +52,32 @@
                 <span class="badge bg-success">{{ source.answers_count || 0 }}</span>
               </td>
               <td>
+                <!-- Colonne Indexé -->
+                <div class="text-center">
+                  <span v-if="source.is_indexed_at" class="badge bg-success">
+                    <i class="bi bi-check-circle"></i> {{ $t('Oui', 2) }}
+                  </span>
+                  <span v-else class="badge bg-secondary">
+                    <i class="bi bi-x-circle"></i> {{ $t('Non', 2) }}
+                  </span>
+                </div>
+              </td>
+              <td>
+                <!-- Colonne Analyse -->
+                <div class="text-center">
+                  <button class="btn btn-sm" :class="{
+                    'btn-outline-success': !source.qa_status || source.qa_status === 'completed',
+                    'btn-outline-warning': source.qa_status === 'failed',
+                    'btn-outline-info': source.qa_status === 'pending',
+                    'btn-success': source.qa_status === 'running'
+                  }" @click="handleQAAnalysis(source)" :title="getQATooltip(source.qa_status)"
+                    :disabled="source.qa_status === 'running' || source.qa_status === 'pending' || !source.is_indexed_at"
+                    data-bs-toggle="tooltip" data-bs-placement="top">
+                    <ButtonSpinner :status="source.qa_status" default-icon-class="bi bi-robot" />
+                  </button>
+                </div>
+              </td>
+              <td>
                 <div class="btn-group" role="group">
                   <button class="btn btn-outline-danger btn-sm" @click="deleteSource(source.id)" :title="$t('Delete')">
                     <i class="bi bi-trash"></i>
@@ -63,55 +85,28 @@
                   <button class="btn btn-outline-primary btn-sm" @click="editSource(source.id)" :title="$t('Edit')">
                     <i class="bi bi-pencil"></i>
                   </button>
-                  <button class="btn btn-outline-info btn-sm" @click="viewSourceDetails(source)" :title="$t('Voir détails')">
+                  <button class="btn btn-outline-info btn-sm" @click="viewSourceDetails(source)"
+                    :title="$t('Voir détails')">
                     <i class="bi bi-eye"></i>
                   </button>
-                  <button 
-                    class="btn btn-sm" 
-                    :class="{
-                      'btn-outline-success': !source.qa_status || source.qa_status === 'completed',
-                      'btn-outline-warning': source.qa_status === 'failed',
-                      'btn-outline-info': source.qa_status === 'pending',
-                      'btn-success': source.qa_status === 'running'
-                    }"
-                    @click="handleQAAnalysis(source)" 
-                    :title="getQATooltip(source.qa_status)"
-                    :disabled="source.qa_status === 'running' || source.qa_status === 'pending'"
-                    data-bs-toggle="tooltip"
-                    data-bs-placement="top"
-                  >
-                    <ButtonSpinner 
-                      :status="source.qa_status" 
-                      default-icon-class="bi bi-robot"
-                    />
-                  </button>
-                  
+
                   <!-- Bouton d'indexation de la source -->
-                  <button 
-                    class="btn btn-sm" 
-                    :class="{
-                      'btn-outline-secondary': !source.indexing_status || source.indexing_status === 'completed',
-                      'btn-outline-warning': source.indexing_status === 'failed',
-                      'btn-outline-info': source.indexing_status === 'pending',
-                      'btn-secondary': source.indexing_status === 'running'
-                    }"
-                    @click="handleSourceIndexing(source)" 
-                    :title="getIndexingTooltip(source.indexing_status)"
+                  <button class="btn btn-sm" :class="{
+                    'btn-outline-secondary': !source.indexing_status || source.indexing_status === 'completed',
+                    'btn-outline-warning': source.indexing_status === 'failed',
+                    'btn-outline-info': source.indexing_status === 'pending',
+                    'btn-secondary': source.indexing_status === 'running'
+                  }" @click="handleSourceIndexing(source)" :title="getIndexingTooltip(source.indexing_status)"
                     :disabled="source.indexing_status === 'running' || source.indexing_status === 'pending'"
-                    data-bs-toggle="tooltip"
-                    data-bs-placement="top"
-                  >
-                    <ButtonSpinner 
-                      :status="source.indexing_status" 
-                      default-icon-class="bi bi-database"
-                    />
+                    data-bs-toggle="tooltip" data-bs-placement="top">
+                    <ButtonSpinner :status="source.indexing_status" default-icon-class="bi bi-database" />
                   </button>
                 </div>
               </td>
             </tr>
           </tbody>
         </table>
-        
+
         <!-- Message si aucun document -->
         <div v-if="sources.length === 0" class="text-center text-muted py-5">
           <i class="bi bi-file-text display-1"></i>
@@ -126,17 +121,18 @@
 </template>
 
 <script setup>
-import { ref, onMounted, watch, computed, nextTick } from 'vue';
+import { ref, onMounted, onBeforeUnmount, watch, computed, nextTick } from 'vue';
 import { useI18n } from 'vue-i18n';
 import SourceForm from './SourceForm.vue';
 import NotificationToast from './NotificationToast.vue';
 import ConfirmationModal from './ConfirmationModal.vue';
 import ButtonSpinner from './ButtonSpinner.vue';
 import apiService from '../services/apiService.js';
-import { launchQAAnalysis } from '../services/tasks.js';
+import { launchQAAnalysis, launchIndexing } from '../services/tasks.js';
 import { useErrorHandler } from '../composables/useErrorHandler.js';
 import { useTooltips } from '../composables/useTooltips';
-import { SOURCE_API_URL, SOURCE_FORM_URL, SOURCE_EDIT_URL, QA_API_URL } from '../config/api.js';
+import { useDataTable } from '../composables/useDataTable.js';
+import { SOURCE_API_URL, SOURCE_FORM_URL, SOURCE_EDIT_URL, QA_API_URL, ETL_API_URL } from '../config/api.js';
 
 const { t } = useI18n();
 
@@ -157,6 +153,20 @@ const {
 // Utilisation du composable de tooltips
 const { initTooltips, destroyTooltips } = useTooltips();
 
+// Utilisation du composable DataTable
+const { tableRef, initDataTable, destroyDataTable, refreshDataTable } = useDataTable({
+  pageLength: 10,
+  lengthMenu: [[5, 10, 25, 50], [5, 10, 25, 50]],
+  order: [[0, 'asc']],
+  columnDefs: [
+    { targets: [5, 6, 7], orderable: false }, // Colonnes Indexé, Analyse, Actions non triables
+    { targets: [3, 4], type: 'num' }, // Colonnes Questions et Answers de type numérique
+  ],
+  //language: {
+  //url: '//cdn.datatables.net/plug-ins/1.13.7/i18n/fr-FR.json'
+  //}
+});
+
 // Props
 const props = defineProps({
   collectionId: {
@@ -171,7 +181,7 @@ const props = defineProps({
   }
 });
 
-const emit = defineEmits(['refresh', 'view-details']);
+const emit = defineEmits(['view-details']);
 
 // Gestionnaires d'événements pour les composants UI
 function handleConfirm() {
@@ -200,23 +210,32 @@ const sourceFormUrl = computed(() => {
   return url;
 });
 
-// Fonctions simplifiées
+
+const updateSourceStatus = (status, source) => {
+      const sourceIndex = sources.value.findIndex(s => s.id === source.id);
+      if (sourceIndex !== -1) {
+        sources.value[sourceIndex].indexing_status = status;
+        logger.log(`Statut d'indexation mis à jour pour la source ${source.id}: ${status}`);
+      }
+    };
+
+// Fonctions simplifiées∑
 async function fetchSources() {
   try {
     let url = SOURCE_API_URL;
-    
+
     if (props.collectionId) {
       url += `?collection=${props.collectionId}`;
     }
-    
+
     const response = await apiService.get(url);
     if (!response.ok) {
       throw new Error(`HTTP error! status: ${response.status}`);
     }
-    
+
     const data = await response.json();
     sources.value = Array.isArray(data) ? data : (data.results || []);
-    
+
     logger.log('Sources fetched successfully:', sources.value.length);
   } catch (error) {
     logger.error('Erreur lors du chargement des sources:', error);
@@ -228,36 +247,31 @@ async function fetchSources() {
 // Fonction pour rafraîchir les données et réinitialiser les tooltips
 async function refreshDataAndTooltips() {
   try {
-    // Détruire les tooltips existants
+    logger.log('Début du rafraîchissement des données...');
+
+    // Détruire d'abord DataTable et tooltips pour éviter les conflits DOM
+    destroyDataTable();
     destroyTooltips();
-    
+    await nextTick();
     await fetchSources();
-    
-    // Réinitialiser les tooltips après le rechargement
     await nextTick();
     initTooltips();
+
+    console.log('Sources après rafraîchissement:', sources.value.length);
+
+    if (sources.value.length > 0) {
+      initDataTable();
+      logger.log('DataTable initialisé avec succès');
+    } else {
+      logger.log('Aucune source à afficher, DataTable non initialisé');
+    }
+
+    logger.log('Rafraîchissement des données terminé');
   } catch (error) {
     logger.error('Erreur lors du rafraîchissement des données et tooltips:', error);
-  }
-}
-
-// Fonction pour rafraîchir le statut d'indexation d'une source
-async function refreshSourceIndexingStatus(source) {
-  try {
-    // Utiliser l'API des sources existante pour récupérer les données mises à jour
-    const response = await fetch(`/rag_app/api/sources/${source.id}/`);
-    
-    if (response.ok) {
-      const result = await response.json();
-      const sourceIndex = sources.value.findIndex(s => s.id === source.id);
-      if (sourceIndex !== -1) {
-        // Mettre à jour le statut d'indexation
-        sources.value[sourceIndex].indexing_status = result.indexing_status;
-        logger.log(`Statut d'indexation mis à jour pour la source ${source.id}: ${result.indexing_status}`);
-      }
-    }
-  } catch (error) {
-    logger.error('Erreur lors de la vérification du statut d\'indexation:', error);
+    // En cas d'erreur, s'assurer que l'état est cohérent
+    sources.value = [];
+    error.value = error.message;
   }
 }
 
@@ -272,20 +286,17 @@ function closeEditForm() {
 async function handleSourceSuccess() {
   try {
     logger.log('Source added/updated successfully, reloading data...');
-    
+
     // Fermer les popups
     showUpload.value = false;
     showEdit.value = false;
-    
+
     // Rafraîchir les données et tooltips
     await refreshDataAndTooltips();
-    
-    // Émettre un événement pour notifier le parent
-    emit('refresh');
-    
+
     // Afficher un message de succès
     showSuccess(t('Document ajouté/modifié avec succès'));
-    
+
   } catch (error) {
     logger.error('Error in handleSourceSuccess:', error);
     showError(t('Erreur lors de la mise à jour des données'));
@@ -305,14 +316,16 @@ function editSource(id) {
 function deleteSource(id) {
   const source = sources.value.find(s => s.id === id);
   const sourceName = source?.title || 'ce document';
-  
+
   confirmDelete(sourceName, async () => {
     try {
       const response = await apiService.deleteWithCsrfFetch(`${SOURCE_API_URL}${id}/`);
-      
+
       if (response.ok) {
         await fetchSources();
         showSuccess(t('Document supprimé avec succès'));
+        // Rafraîchir DataTable
+        await refreshDataAndTooltips();
       } else {
         showError(t('Erreur lors de la suppression du document'));
       }
@@ -365,37 +378,19 @@ function getIndexingTooltip(indexingStatus) {
 async function handleQAAnalysis(source) {
   try {
     logger.log('Lancement de l\'analyse QA pour la source:', source.id);
-    
-    // Fonction utilitaire pour mettre à jour le statut de la source
-    const updateSourceStatus = (status) => {
-      const sourceIndex = sources.value.findIndex(s => s.id === source.id);
-      if (sourceIndex !== -1) {
-        sources.value[sourceIndex].qa_status = status;
-        logger.log(`Statut mis à jour pour la source ${source.id}: ${status}`);
-      }
-    };
-    
-    // Mettre à jour le statut localement pour afficher l'état pending immédiatement
-    updateSourceStatus('pending');
-    
-    // Attendre un peu pour montrer l'état pending
+    updateSourceStatus('pending', source);
     await new Promise(resolve => setTimeout(resolve, 100));
-    
-    // Puis passer à running
-    updateSourceStatus('running');
-    
-    // Utiliser le service centralisé avec callbacks pour la gestion des événements
+    updateSourceStatus('running', source);
+
     await launchQAAnalysis(source, QA_API_URL, {
       onStatusUpdate: (status, data) => {
         logger.log(`Statut QA mis à jour pour la source ${source.id}:`, status);
-        updateSourceStatus(status);
+        updateSourceStatus(status, source);
       },
       onSuccess: (data) => {
         logger.log('Analyse QA terminée avec succès:', data);
-        updateSourceStatus('completed');
-        
+        updateSourceStatus('completed', source);
         showSuccess(t('Analyse terminée avec succès !'));
-        
         // Recharger les données pour afficher les nouvelles réponses
         setTimeout(async () => {
           await refreshDataAndTooltips();
@@ -403,146 +398,59 @@ async function handleQAAnalysis(source) {
       },
       onError: (error, data) => {
         logger.error('Erreur lors de l\'analyse QA:', error);
-        updateSourceStatus('failed');
-        
+        updateSourceStatus('failed', source);
         handleApiError(error, t('Erreur lors de l\'analyse'));
       },
       onComplete: (finalStatus, data) => {
         logger.log(`Analyse QA terminée pour la source ${source.id} avec le statut:`, finalStatus);
-        updateSourceStatus(finalStatus);
+        updateSourceStatus(finalStatus, source);
       }
     });
-    
+
   } catch (error) {
     logger.error('Erreur lors du lancement de l\'analyse QA:', error);
-    // En cas d'erreur, remettre le statut à null
-    updateSourceStatus(null);
-    // L'erreur est déjà gérée par le service via les callbacks
+    updateSourceStatus(null, source);
   }
 }
 
 async function handleSourceIndexing(source) {
-  try {
+  try{
     logger.log('Lancement de l\'indexation pour la source:', source.id);
-    
-    // Vérifier qu'une collection est sélectionnée
-    if (!props.selectedCollection) {
-      showError(t('Veuillez sélectionner une collection pour indexer cette source'));
-      return;
-    }
-    
-    // Fonction utilitaire pour mettre à jour le statut de la source
-    const updateSourceStatus = (status) => {
-      const sourceIndex = sources.value.findIndex(s => s.id === source.id);
-      if (sourceIndex !== -1) {
-        sources.value[sourceIndex].indexing_status = status;
-        logger.log(`Statut d'indexation mis à jour pour la source ${source.id}: ${status}`);
-      }
-    };
-    
-    // Mettre à jour le statut localement pour afficher l'état pending immédiatement
-    updateSourceStatus('pending');
-    
-    // Attendre un peu pour montrer l'état pending
-    await new Promise(resolve => setTimeout(resolve, 100));
-    
-    // Puis passer à running
-    updateSourceStatus('running');
-    
-    // Lancer la tâche d'indexation via l'API ETL
-    const response = await fetch('/rag_app/api/etl/', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]')?.value || '',
+
+    await launchIndexing(source, ETL_API_URL, {
+      onStatusUpdate: (status, data) => {
+        logger.log(`Statut d'indexation mis à jour pour la source ${source.id}:`, status);
+        updateSourceStatus(status, source);
       },
-      body: JSON.stringify({
-        collection_id: props.selectedCollection.id,
-        source_id: source.id
-      })
+      onSuccess: (data) => {
+        logger.log('Indexation terminée avec succès:', data);
+        updateSourceStatus('completed', source);
+        showSuccess(t('Indexation terminée avec succès !'));
+        // Recharger les données pour afficher les nouvelles réponses
+        setTimeout(async () => {
+          await refreshDataAndTooltips();
+        }, 1000);
+      },
+      onError: (error, data) => {
+        logger.error('Erreur lors de l\'indexation:', error);
+        updateSourceStatus('failed', source);
+        handleApiError(error, t('Erreur lors de l\'indexation'));
+      },
+      onComplete: (finalStatus, data) => {
+        logger.log(`Indexation terminée pour la source ${source.id} avec le statut:`, finalStatus);
+        updateSourceStatus(finalStatus, source);
+      }
     });
-    
-    if (!response.ok) {
-      throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-    }
-    
-    const result = await response.json();
-    
-    if (result.status === 'success') {
-      // Polling du statut de la tâche
-      await pollIndexingStatus(result.task_id, source, updateSourceStatus);
-      
-      // Après completion, rafraîchir le statut d'indexation réel
-      await refreshSourceIndexingStatus(source);
-    } else {
-      throw new Error(result.error || 'Erreur lors du lancement de la tâche d\'indexation');
-    }
-    
-  } catch (error) {
+  }
+  catch(error){
     logger.error('Erreur lors du lancement de l\'indexation:', error);
-    // En cas d'erreur, remettre le statut à null
-    const sourceIndex = sources.value.findIndex(s => s.id === source.id);
-    if (sourceIndex !== -1) {
-      sources.value[sourceIndex].indexing_status = null;
-    }
-    showError(t('Erreur lors du lancement de l\'indexation: ') + error.message);
   }
 }
 
-async function pollIndexingStatus(taskId, source, updateSourceStatus) {
-  try {
-    const maxAttempts = 60; // 5 minutes max
-    let attempts = 0;
-    
-    while (attempts < maxAttempts) {
-      await new Promise(resolve => setTimeout(resolve, 5000)); // Attendre 5 secondes
-      attempts++;
-      
-      const response = await fetch(`/rag_app/api/etl/?task_id=${taskId}`);
-      
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-      }
-      
-      const result = await response.json();
-      
-      if (result.status === 'completed') {
-        updateSourceStatus('completed');
-        showSuccess(t('Source indexée avec succès !'));
-        break;
-      } else if (result.status === 'failed') {
-        updateSourceStatus('failed');
-        showError(t('Indexation échouée: ') + (result.error || 'Erreur inconnue'));
-        break;
-      } else if (result.status === 'running') {
-        updateSourceStatus('running');
-      }
-      
-      // Si on atteint le maximum d'essais
-      if (attempts >= maxAttempts) {
-        updateSourceStatus('failed');
-        showError(t('Indexation en timeout - la tâche prend trop de temps'));
-        break;
-      }
-    }
-  } catch (error) {
-    logger.error('Erreur lors du polling du statut d\'indexation:', error);
-    updateSourceStatus('failed');
-    showError(t('Erreur lors de la vérification du statut d\'indexation'));
-  }
-}
-
-// La fonction pollQAStatus a été déplacée dans le service tasks.js
-// et est maintenant gérée par la fonction launchQAAnalysis centralisée
-
-// Lifecycle
 onMounted(async () => {
   try {
     logger.log('Document component mounted, initializing...');
-    
-    // Charger les sources et initialiser les tooltips
     await refreshDataAndTooltips();
-    
     logger.log('Document component initialized successfully');
   } catch (error) {
     logger.error('Error in onMounted:', error);
@@ -550,18 +458,25 @@ onMounted(async () => {
   }
 });
 
-// Watcher simplifié
+onBeforeUnmount(() => {
+  destroyDataTable();
+  destroyTooltips();
+
+  logger.log('Composant SourceList démonté, ressources nettoyées');
+});
+
+// Watcher amélioré pour les changements de collection
 watch(() => props.collectionId, async (newCollectionId, oldCollectionId) => {
   if (newCollectionId === oldCollectionId) {
     return;
   }
-  
+
   try {
     logger.log('Collection changed, reloading sources...');
-    
-    // Rafraîchir les données et tooltips
+    sources.value = [];
+    await nextTick();
     await refreshDataAndTooltips();
-    
+
     logger.log('Collection change completed');
   } catch (error) {
     logger.error('Error in collectionId watch:', error);
@@ -593,7 +508,7 @@ watch(() => props.collectionId, async (newCollectionId, oldCollectionId) => {
 }
 
 .table-hover tbody tr:hover {
-  background-color: rgba(0, 0, 0, 0.075);
+  background-color: rgba(36, 119, 130, 0.474);
 }
 
 /* Responsive adjustments */
@@ -601,12 +516,12 @@ watch(() => props.collectionId, async (newCollectionId, oldCollectionId) => {
   .btn-group {
     flex-direction: column;
   }
-  
+
   .btn-group .btn {
     margin-right: 0;
     margin-bottom: 0.25rem;
   }
-  
+
   .btn-group .btn:last-child {
     margin-bottom: 0;
   }
@@ -675,4 +590,51 @@ watch(() => props.collectionId, async (newCollectionId, oldCollectionId) => {
   display: block;
   margin: 0 auto;
 }
-</style> 
+
+/* Styles pour DataTables */
+.dataTables_wrapper .dataTables_length,
+.dataTables_wrapper .dataTables_filter,
+.dataTables_wrapper .dataTables_info,
+.dataTables_wrapper .dataTables_paginate {
+  margin: 1rem 0;
+}
+
+.dataTables_wrapper .dataTables_filter input {
+  border: 1px solid #dee2e6;
+  border-radius: 0.375rem;
+  padding: 0.375rem 0.75rem;
+}
+
+.dataTables_wrapper .dataTables_paginate .paginate_button {
+  border: 1px solid #dee2e6;
+  border-radius: 0.375rem;
+  margin: 0 0.125rem;
+}
+
+.dataTables_wrapper .dataTables_paginate .paginate_button.current {
+  background-color: #0d6efd;
+  border-color: #0d6efd;
+  color: white !important;
+}
+
+.dataTables_wrapper .dataTables_paginate .paginate_button:hover {
+  background-color: #e9ecef;
+  border-color: #dee2e6;
+}
+
+/* Responsive pour DataTables */
+@media (max-width: 768px) {
+
+  .dataTables_wrapper .dataTables_length,
+  .dataTables_wrapper .dataTables_filter {
+    text-align: center;
+    margin-bottom: 0.5rem;
+  }
+
+  .dataTables_wrapper .dataTables_info,
+  .dataTables_wrapper .dataTables_paginate {
+    text-align: center;
+    margin-top: 0.5rem;
+  }
+}
+</style>

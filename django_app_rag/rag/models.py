@@ -3,7 +3,9 @@ from pathlib import Path
 import random
 from pydantic import BaseModel, Field
 from datasets import Dataset, DatasetDict
-from loguru import logger
+from django_app_rag.rag.logging_setup import get_logger
+
+logger = get_logger(__name__)
 from django_app_rag.rag import utils
 from typing import Literal
 
@@ -32,13 +34,19 @@ class DocumentMetadata(BaseModel):
 
 
 class Document(BaseModel):
-    id: str = Field(default_factory=lambda: utils.generate_random_hex(length=32))
+    id: str
     metadata: DocumentMetadata
     parent_metadata: DocumentMetadata | None = None
     content: str
     content_quality_score: float | None = None
     summary: str | None = None
     child_urls: list[str] = Field(default_factory=list)
+
+    def __init__(self, **data):
+        # Si l'ID n'est pas fourni, générer automatiquement un hash du contenu
+        if 'id' not in data and 'content' in data:
+            data['id'] = utils.generate_content_hash(data['content'])
+        super().__init__(**data)
 
     @classmethod
     def from_file(cls, file_path: Path) -> "Document":

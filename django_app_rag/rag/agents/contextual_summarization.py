@@ -3,7 +3,9 @@ import os
 
 import psutil
 from litellm import acompletion
-from loguru import logger
+from django_app_rag.rag.logging_setup import get_logger
+
+logger = get_logger(__name__)
 from openai import AsyncOpenAI
 from pydantic import BaseModel
 from tqdm.asyncio import tqdm

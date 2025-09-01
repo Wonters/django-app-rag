@@ -3,7 +3,9 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_core.documents import Document as LangChainDocument
-from loguru import logger
+from django_app_rag.rag.logging_setup import get_logger
+
+logger = get_logger(__name__)
 
 import copy
 from .agents import (

@@ -38,6 +38,11 @@ Repository = "https://github.com/Wonters/django-app-rag.git"
 [tool.setuptools.dynamic]
 dependencies = {file = ["requirements.txt"]}
 
+[tool.setuptools]
+# Hooks d'installation pour exécuter le script d'installation des dépendances
+[tool.setuptools.install-hooks]
+post-install = "django_app_rag.install_hooks:run_post_install"
+
 [tool.hatch.build.targets.wheel]
 packages = ["django_app_rag"]
 

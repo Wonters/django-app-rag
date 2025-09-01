@@ -1,7 +1,9 @@
 from typing_extensions import Annotated
 from zenml import get_step_context
 from zenml.steps import step
-from loguru import logger
+from django_app_rag.rag.logging_setup import get_logger
+
+logger = get_logger(__name__)
 from django_app_rag.rag.models import Document
 
 

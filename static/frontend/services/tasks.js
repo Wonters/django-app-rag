@@ -243,6 +243,28 @@ export async function launchQAAnalysis(source, qaApiUrl, options = {}) {
     });
 }
 
+
+/**
+ * Fonction spécifique pour lancer l'indexation d'une source
+ * @param {Object} source - L'objet source à indexer
+ * @param {string} endpoint - URL de l'API ETL
+ * @param {Object} options - Options de configuration
+ * @param {Function} options.onStatusUpdate - Callback pour les mises à jour de statut
+ * @param {Function} options.onSuccess - Callback en cas de succès
+ * @param {Function} options.onError - Callback en cas d'erreur
+ * @param {Function} options.onComplete - Callback à la fin
+ * @returns {Promise<Object>} - Promise résolue avec le résultat
+ */
+export async function launchIndexing(source, endpoint, options = {}) {
+    const taskData = { source_id: source.id };
+    return launchTaskAndPoll(endpoint, taskData, {
+        ...options,
+        timeoutMessage: 'L\'indexation prend trop de temps'
+    });
+}
+
+
+
 /**
  * Gestionnaire de réponses API standardisées pour les tâches
  * @param {Object} data - Données de réponse avec format standardisé

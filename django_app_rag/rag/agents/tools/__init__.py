@@ -1,7 +1,9 @@
 from pathlib import Path
 from typing import Any
 
-from loguru import logger
+from django_app_rag.rag.logging_setup import get_logger
+
+logger = get_logger(__name__)
 from smolagents import LiteLLMModel, MessageRole, MultiStepAgent, ToolCallingAgent
 
 from django_app_rag.rag.settings import settings

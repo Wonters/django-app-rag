@@ -1,13 +1,13 @@
 from pathlib import Path
 
-from loguru import logger
+from django_app_rag.rag.logging_setup import get_logger
+
+logger = get_logger(__name__)
 from zenml import pipeline
 
 from ..steps.etl import add_quality_score, crawl
 from ..steps.infrastructure import (
     read_documents_from_disk,
-    save_documents_to_disk,
-    upload_to_s3,
     combine_documents,
 )
 from ..steps.infrastructure.save_to_diskstorage import save_to_diskstorage
@@ -44,6 +44,11 @@ def etl_mixed(
     notion_documents = None
     files_documents = None
     urls_documents = None
+
+    root_data_dir = data_dir
+
+    if storage_mode == "append":
+        data_dir = data_dir / "tmp"
     
     # Traiter les données Notion
     if include_notion:
@@ -99,6 +104,10 @@ def etl_mixed(
     save_to_diskstorage(
         documents=enhanced_documents, 
         collection_name=collection_name, 
-        data_dir=data_dir.as_posix(),
+        data_dir=root_data_dir.as_posix(),
         mode=storage_mode
     ) 
+
+    if storage_mode == "append":
+        for directory in data_dir.iterdir():
+            directory.rename(directory.parent / directory.name)

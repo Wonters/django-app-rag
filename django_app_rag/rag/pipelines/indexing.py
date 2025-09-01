@@ -1,5 +1,7 @@
 from zenml import pipeline
-from loguru import logger
+from django_app_rag.rag.logging_setup import get_logger
+
+logger = get_logger(__name__)
 from ..embeddings import EmbeddingModelType
 from ..retrievers import RetrieverType
 from ..splitters import SummarizationType

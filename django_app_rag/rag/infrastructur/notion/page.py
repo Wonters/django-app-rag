@@ -1,5 +1,7 @@
 import requests
-from loguru import logger
+from django_app_rag.rag.logging_setup import get_logger
+
+logger = get_logger(__name__)
 
 from django_app_rag.rag.settings import settings
 from django_app_rag.rag.models import Document, DocumentMetadata
@@ -49,7 +51,6 @@ class NotionDocumentClient:
             )
 
         return Document(
-            id=document_metadata.id,
             metadata=document_metadata,
             parent_metadata=parent_metadata,
             content=content,

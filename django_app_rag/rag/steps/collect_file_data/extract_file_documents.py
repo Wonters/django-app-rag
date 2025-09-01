@@ -2,7 +2,9 @@ import os
 from pathlib import Path
 from typing_extensions import Annotated
 from zenml import get_step_context, step
-from loguru import logger
+from django_app_rag.rag.logging_setup import get_logger
+
+logger = get_logger(__name__)
 
 # Désactiver NNPACK et optimisations CPU problématiques
 os.environ["USE_NNPACK"] = "0"
@@ -188,8 +190,7 @@ def extract_file_documents(
                 docling_used = False
                 processing_method = "fallback_text_reading"
             
-            # Créer les métadonnées du document
-            document_id = utils.generate_random_hex(length=32)
+
             
             document_metadata = DocumentMetadata(
                 id=document_id,
@@ -209,7 +210,6 @@ def extract_file_documents(
             
             # Créer le document
             document = Document(
-                id=document_id,
                 metadata=document_metadata,
                 parent_metadata=None,
                 content=content,
@@ -246,7 +246,6 @@ def extract_file_documents(
                 )
                 
                 document = Document(
-                    id=document_id,
                     metadata=document_metadata,
                     parent_metadata=None,
                     content=content,

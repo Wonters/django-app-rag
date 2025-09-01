@@ -1,5 +1,7 @@
 import random
 import string
+import hashlib
+import base64
 
 import tiktoken
 
@@ -59,3 +61,26 @@ def clip_tokens(text: str, max_tokens: int, model_id: str) -> str:
         return text
 
     return encoding.decode(tokens[:max_tokens])
+
+
+def generate_content_hash(content: str, length: int = 32) -> str:
+    """Generate a hash of the content using SHA-256 and convert to base64.
+    
+    Args:
+        content: The content string to hash.
+        length: The desired length of the final hash (truncated from base64).
+        
+    Returns:
+        str: A base64 hash of the content, truncated to the specified length.
+    """
+    # Generate SHA-256 hash of the content
+    content_hash = hashlib.sha256(content.encode('utf-8')).digest()
+    
+    # Convert to base64 and remove padding characters
+    base64_hash = base64.urlsafe_b64encode(content_hash).decode('utf-8').rstrip('=')
+    
+    # Truncate to desired length if needed
+    if length and len(base64_hash) > length:
+        base64_hash = base64_hash[:length]
+    
+    return base64_hash

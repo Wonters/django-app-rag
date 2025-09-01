@@ -29,17 +29,18 @@ def retrieve(config):
         cfg = yaml.safe_load(f)
 
     # Conversion des chemins de fichiers en objets Path
-    file_paths = None
+    file_paths = []
     if cfg.get("file_paths"):
         file_paths = [Path(p) for p in cfg["file_paths"]]
 
     collect_data(
         data_dir=Path(cfg["data_dir"]),
         file_paths=file_paths,
-        urls=cfg.get("urls"),
-        notion_database_ids=cfg.get("notion_database_ids"),
+        urls=cfg.get("urls", []),
+        notion_database_ids=cfg.get("notion_database_ids", []),
         to_s3=cfg.get("to_s3", False),
         max_workers=cfg.get("max_workers", 10),
+        storage_mode=cfg.get("storage_mode", "overwrite"),
     )
 
 
@@ -63,76 +64,9 @@ def etl(config):
         include_notion=cfg.get("include_notion", True),
         include_files=cfg.get("include_files", True),
         include_urls=cfg.get("include_urls", True),
+        storage_mode=cfg.get("storage_mode", "overwrite"),
     )
 
-
-@cli.command()
-@click.option(
-    "--config",
-    type=click.Path(exists=True),
-    required=True,
-    help="Chemin du fichier de configuration YAML",
-)
-def etl_source(config):
-    """Traiter une source unique (fichier, URL ou Notion) en lançant collect_data, etl et indexing"""
-    with open(config, "r") as f:
-        cfg = yaml.safe_load(f)
-
-    file_args = {
-        "file_paths": [],
-        "urls": [],
-        "notion_database_ids": [],
-    }
-    
-    
-    # Étape 1: Collecte des données
-    if cfg["source_type"] == "file":
-        file_args["file_paths"] = [Path(cfg["source_identifier"])]
-    elif cfg["source_type"] == "url":
-        file_args["urls"] = [cfg["source_identifier"]]
-    elif cfg["source_type"] == "notion":
-        file_args["notion_database_ids"] = [cfg["source_identifier"]]
-    else:
-        raise ValueError(f"Type de source non supporté: {cfg['source_type']}")
-    
-    collect_data(
-        data_dir=Path(cfg["data_dir"]),
-        **file_args,
-        to_s3=cfg.get("to_s3", False),
-        max_workers=cfg.get("max_workers", 10),
-    )
-    
-    # Étape 2: ETL
-    etl_mixed(
-        data_dir=Path(cfg["data_dir"]),
-        collection_name=cfg["collection_name"],
-        to_s3=cfg["to_s3"],
-        max_workers=cfg["max_workers"],
-        quality_agent_model_id=cfg["quality_agent_model_id"],
-        quality_agent_mock=cfg.get("quality_agent_mock", False),
-        include_notion=cfg.get("include_notion", True),
-        include_files=cfg.get("include_files", True),
-        include_urls=cfg.get("include_urls", True),
-    )
-    
-    # Étape 3: Indexing
-    compute_rag_vector_index(
-        collection_name=cfg["collection_name"],
-        fetch_limit=cfg["fetch_limit"],
-        content_quality_score_threshold=cfg["content_quality_score_threshold"],
-        retriever_type=cfg["retriever_type"],
-        embedding_model_id=cfg["embedding_model_id"],
-        embedding_model_type=cfg.get("embedding_model_type"),
-        embedding_model_dim=cfg.get("embedding_model_dim"),
-        chunk_size=cfg.get("chunk_size"),
-        vectorstore=cfg.get("vectorstore", "faiss"),
-        contextual_summarization_type=cfg.get("contextual_summarization_type"),
-        contextual_agent_model_id=cfg.get("contextual_agent_model_id"),
-        contextual_agent_max_characters=cfg.get("contextual_agent_max_characters"),
-        mock=cfg.get("mock"),
-        data_dir=cfg.get("data_dir", "data"),
-        device=cfg.get("device"),
-    )
 
 
 @cli.command()

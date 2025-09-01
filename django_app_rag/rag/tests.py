@@ -3,7 +3,9 @@ from django_app_rag.rag.infrastructur.disk_storage import DiskStorage
 from django_app_rag.rag.models import Document
 from django_app_rag.rag.retrievers import get_retriever
 from typing import List, Dict, Any, Optional
-from loguru import logger
+from django_app_rag.rag.logging_setup import get_logger
+
+logger = get_logger(__name__)
 from django_app_rag.rag.agents.tools import get_agent
 from pathlib import Path
 import json
@@ -19,6 +21,7 @@ from django_app_rag.models import (
 from django.core.files.base import ContentFile
 from django.core.files import File
 from django_app_rag.rag.agents.tools import QuestionAnswerTool, DiskStorageRetrieverTool
+from django_app_rag.rag.models import DocumentMetadata
 
 
 class TestRetriever:
@@ -40,11 +43,10 @@ class TestRetriever:
 
     def test_disk_storage(self):
         storage = DiskStorage(
-            model_class=Document,
             collection_name="Low_Tech_1",
             data_dir="media/rag_data/1",
         )
-        documents = storage.read()
+        documents = storage.read_raw()
         print(f"Documents: {documents}")
         assert len(documents) > 0
 
@@ -507,3 +509,358 @@ class TestDocling:
         result = converter.convert(
             "media/rag_sources/APsystems-Microinverter-DS3-series-for-Philippines-Datasheet_-Rev1.2_2023-02-08.pdf"
         )
+
+
+
+class TestDiskStorage:
+
+    def setup_method(self):
+        """Configuration initiale pour chaque test"""
+        self.test_data_dir = "media/rag_data/test_disk_storage"
+        self.collection_name = "test_collection"
+        self.storage = DiskStorage(
+            collection_name=self.collection_name,
+            data_dir=self.test_data_dir,
+        )
+
+    def teardown_method(self):
+        """Nettoyage après chaque test"""
+        if hasattr(self, 'storage'):
+            self.storage.clear_collection()
+            self.storage.close()
+
+    def test_disk_storage_initialization(self):
+        """Test de l'initialisation de DiskStorage"""
+        assert self.storage.table == self.collection_name
+        assert self.storage.storage_path.exists()
+        assert Path(self.storage.path).exists()
+
+    def test_add_documents_and_search(self):
+        """Test d'ajout de documents et de recherche par document"""
+        # Créer des documents de test
+        documents = []
+        
+        # Document 1
+        doc1 = Document(
+            id="doc_001",
+            metadata=DocumentMetadata(
+                id="doc_001",
+                url="https://example.com/doc1",
+                title="Document sur les panneaux solaires",
+                properties={"category": "énergie", "language": "fr"},
+                source_type="url"
+            ),
+            content="Les panneaux solaires photovoltaïques convertissent la lumière du soleil en électricité. Ils sont composés de cellules en silicium qui génèrent un courant électrique sous l'effet de la lumière.",
+            content_quality_score=0.9,
+            summary="Guide complet sur les panneaux solaires photovoltaïques"
+        )
+        documents.append(doc1)
+        
+        # Document 2
+        doc2 = Document(
+            id="doc_002",
+            metadata=DocumentMetadata(
+                id="doc_002",
+                url="https://example.com/doc2",
+                title="Guide d'installation APSDS3",
+                properties={"category": "installation", "language": "fr"},
+                source_type="file"
+            ),
+            content="L'installation des micro-onduleurs APSDS3 nécessite une planification minutieuse. Vérifiez la compatibilité des panneaux et suivez les instructions de sécurité.",
+            content_quality_score=0.85,
+            summary="Instructions d'installation pour les micro-onduleurs APSDS3"
+        )
+        documents.append(doc2)
+        
+        # Document 3
+        doc3 = Document(
+            id="doc_003",
+            metadata=DocumentMetadata(
+                id="doc_003",
+                url="https://example.com/doc3",
+                title="Maintenance des systèmes solaires",
+                properties={"category": "maintenance", "language": "fr"},
+                source_type="url"
+            ),
+            content="La maintenance régulière des systèmes solaires inclut le nettoyage des panneaux, la vérification des connexions et le monitoring des performances. Un entretien annuel est recommandé.",
+            content_quality_score=0.8,
+            summary="Guide de maintenance pour systèmes solaires"
+        )
+        documents.append(doc3)
+
+        # Sauvegarder les documents
+        self.storage.save(documents, mode="overwrite")
+        
+        # Vérifier que les documents ont été sauvegardés
+        saved_docs = self.storage.read_raw()
+        assert len(saved_docs) == 3
+        assert self.storage.get_document_count() == 3
+        
+        # Recherche par contenu de document
+        # Recherche 1: Recherche par mot-clé "panneaux solaires"
+        found_docs = []
+        for doc in saved_docs:
+            if "panneaux solaires" in doc["content"].lower():
+                found_docs.append(doc)
+        
+        assert len(found_docs) == 1
+        assert found_docs[0]["metadata"]["title"] == "Document sur les panneaux solaires"
+        
+        # Recherche 2: Recherche par mot-clé "APSDS3"
+        found_docs = []
+        for doc in saved_docs:
+            if "apsds3" in doc["content"].lower():
+                found_docs.append(doc)
+        
+        assert len(found_docs) == 1
+        assert found_docs[0]["metadata"]["title"] == "Guide d'installation APSDS3"
+        
+        # Recherche 3: Recherche par catégorie dans les propriétés
+        found_docs = []
+        for doc in saved_docs:
+            if doc["metadata"]["properties"].get("category") == "énergie":
+                found_docs.append(doc)
+        
+        assert len(found_docs) == 1
+        assert found_docs[0]["metadata"]["title"] == "Document sur les panneaux solaires"
+        
+        # Recherche 4: Recherche par score de qualité
+        high_quality_docs = []
+        for doc in saved_docs:
+            if doc.get("content_quality_score") and doc["content_quality_score"] > 0.85:
+                high_quality_docs.append(doc)
+        
+        assert len(high_quality_docs) == 2  # doc1 (0.9) et doc2 (0.85)
+        
+        # Recherche 5: Recherche par type de source
+        url_docs = []
+        for doc in saved_docs:
+            if doc["metadata"]["source_type"] == "url":
+                url_docs.append(doc)
+        
+        assert len(url_docs) == 2  # doc1 et doc3
+
+    def test_append_mode(self):
+        """Test du mode append pour ajouter des documents sans écraser"""
+        # Documents initiaux
+        initial_docs = [
+            Document(
+                id="doc_001",
+                metadata=DocumentMetadata(
+                    id="doc_001",
+                    url="https://example.com/doc1",
+                    title="Document initial",
+                    properties={"category": "test"},
+                    source_type="url"
+                ),
+                content="Contenu du document initial",
+                content_quality_score=0.8
+            )
+        ]
+        
+        # Sauvegarder les documents initiaux
+        self.storage.save(initial_docs, mode="overwrite")
+        assert self.storage.get_document_count() == 1
+        
+        # Ajouter de nouveaux documents en mode append
+        new_docs = [
+            Document(
+                id="doc_002",
+                metadata=DocumentMetadata(
+                    id="doc_002",
+                    url="https://example.com/doc2",
+                    title="Nouveau document",
+                    properties={"category": "test"},
+                    source_type="url"
+                ),
+                content="Contenu du nouveau document",
+                content_quality_score=0.9
+            )
+        ]
+        
+        self.storage.save(new_docs, mode="append")
+        
+        # Vérifier que les deux documents sont présents
+        all_docs = self.storage.read_raw()
+        assert len(all_docs) == 2
+        assert self.storage.get_document_count() == 2
+        
+        # Vérifier que le document initial est toujours là
+        initial_doc = next((doc for doc in all_docs if doc["id"] == "doc_001"), None)
+        assert initial_doc is not None
+        assert initial_doc["content"] == "Contenu du document initial"
+
+    def test_search_by_multiple_criteria(self):
+        """Test de recherche combinant plusieurs critères"""
+        # Créer des documents avec des critères variés
+        documents = [
+            Document(
+                id="doc_001",
+                metadata=DocumentMetadata(
+                    id="doc_001",
+                    url="https://example.com/doc1",
+                    title="Panneaux solaires haute performance",
+                    properties={"category": "énergie", "efficiency": "haute", "language": "fr"},
+                    source_type="url"
+                ),
+                content="Les panneaux solaires de haute performance offrent un rendement supérieur à 22%. Ils sont idéaux pour les installations résidentielles et commerciales.",
+                content_quality_score=0.95,
+                summary="Panneaux solaires haute performance"
+            ),
+            Document(
+                id="doc_002",
+                metadata=DocumentMetadata(
+                    id="doc_002",
+                    url="https://example.com/doc2",
+                    title="Installation panneaux basique",
+                    properties={"category": "installation", "efficiency": "standard", "language": "fr"},
+                    source_type="file"
+                ),
+                content="Installation simple de panneaux solaires standard. Procédure étape par étape pour débutants.",
+                content_quality_score=0.7,
+                summary="Installation panneaux basique"
+            ),
+            Document(
+                id="doc_003",
+                metadata=DocumentMetadata(
+                    id="doc_003",
+                    url="https://example.com/doc3",
+                    title="Maintenance avancée",
+                    properties={"category": "maintenance", "efficiency": "haute", "language": "en"},
+                    source_type="url"
+                ),
+                content="Advanced maintenance procedures for high-efficiency solar panels. Includes monitoring and optimization techniques.",
+                content_quality_score=0.9,
+                summary="Maintenance avancée"
+            )
+        ]
+        
+        # Sauvegarder les documents
+        self.storage.save(documents, mode="overwrite")
+        
+        # Récupérer les documents sauvegardés pour les tests
+        saved_docs = self.storage.read_raw()
+        
+        # Recherche combinée: haute efficacité ET français
+        high_efficiency_french = []
+        for doc in saved_docs:
+            if (doc["metadata"]["properties"].get("efficiency") == "haute" and 
+                doc["metadata"]["properties"].get("language") == "fr"):
+                high_efficiency_french.append(doc)
+        
+        assert len(high_efficiency_french) == 1
+        assert high_efficiency_french[0]["metadata"]["title"] == "Panneaux solaires haute performance"
+        
+        # Recherche combinée: haute efficacité ET score > 0.8
+        high_efficiency_high_score = []
+        for doc in saved_docs:
+            if (doc["metadata"]["properties"].get("efficiency") == "haute" and 
+                doc.get("content_quality_score") and doc["content_quality_score"] > 0.8):
+                high_efficiency_high_score.append(doc)
+        
+        assert len(high_efficiency_high_score) == 2  # doc1 et doc3
+        
+        # Recherche par contenu ET métadonnées
+        content_and_metadata_matches = []
+        for doc in saved_docs:
+            if ("panneaux solaires" in doc["content"].lower() and 
+                doc["metadata"]["properties"].get("category") == "énergie"):
+                content_and_metadata_matches.append(doc)
+        
+        assert len(content_and_metadata_matches) == 1
+        assert content_and_metadata_matches[0]["id"] == "doc_001"
+
+    def test_document_retrieval_and_validation(self):
+        """Test de récupération et validation des documents"""
+        # Créer un document complexe
+        complex_doc = Document(
+            id="complex_doc",
+            metadata=DocumentMetadata(
+                id="complex_doc",
+                url="https://example.com/complex",
+                title="Document complexe avec métadonnées étendues",
+                properties={
+                    "category": "technique",
+                    "difficulty": "avancé",
+                    "tags": ["solaire", "photovoltaïque", "installation"],
+                    "version": "2.1",
+                    "author": "Expert Solaire"
+                },
+                source_type="file"
+            ),
+            content="Ce document technique avancé couvre les aspects complexes de l'installation de systèmes solaires photovoltaïques, incluant les calculs de dimensionnement, l'optimisation du rendement et la conformité aux normes internationales.",
+            content_quality_score=0.98,
+            summary="Guide technique avancé pour systèmes solaires",
+            child_urls=["https://example.com/annexe1", "https://example.com/annexe2"]
+        )
+        
+        # Sauvegarder le document
+        self.storage.save([complex_doc], mode="overwrite")
+        
+        # Récupérer et valider
+        retrieved_docs = self.storage.read_raw()
+        assert len(retrieved_docs) == 1
+        
+        retrieved_doc = retrieved_docs[0]
+        assert retrieved_doc["id"] == "complex_doc"
+        assert retrieved_doc["metadata"]["title"] == "Document complexe avec métadonnées étendues"
+        assert retrieved_doc["metadata"]["properties"]["difficulty"] == "avancé"
+        assert "solaire" in retrieved_doc["metadata"]["properties"]["tags"]
+        assert retrieved_doc["content_quality_score"] == 0.98
+        assert len(retrieved_doc["child_urls"]) == 2
+        
+        # Vérifier que le document peut être sérialisé/désérialisé
+        doc_dict = retrieved_doc
+        recreated_doc = Document.model_validate(doc_dict)
+        assert recreated_doc.id == retrieved_doc["id"]
+        assert recreated_doc.content == retrieved_doc["content"]
+
+    def test_storage_operations(self):
+        """Test des opérations de stockage (clear, count, etc.)"""
+        # Ajouter quelques documents
+        docs = [
+            Document(
+                id="test_doc_1",
+                metadata=DocumentMetadata(
+                    id="test_doc_1",
+                    url="https://test.com/doc1",
+                    title="Test Document 1",
+                    properties={"test": True},
+                    source_type="url"
+                ),
+                content="Contenu de test 1"
+            ),
+            Document(
+                id="test_doc_2",
+                metadata=DocumentMetadata(
+                    id="test_doc_2",
+                    url="https://test.com/doc2",
+                    title="Test Document 2",
+                    properties={"test": True},
+                    source_type="url"
+                ),
+                content="Contenu de test 2"
+            )
+        ]
+        
+        # Test initial
+        self.storage.save(docs, mode="overwrite")
+        assert self.storage.get_document_count() == 2
+        
+        # Test de lecture des données brutes
+        raw_data = self.storage.read_raw()
+        assert len(raw_data) == 2
+        assert isinstance(raw_data[0], dict)
+        
+        # Test de suppression par source
+        self.storage.remove_documents_by_source("https://test.com/doc1")
+        assert self.storage.get_document_count() == 1
+        
+        remaining_docs = self.storage.read_raw()
+        assert len(remaining_docs) == 1
+        assert remaining_docs[0]["metadata"]["url"] == "https://test.com/doc2"
+        
+        # Test de nettoyage complet
+        self.storage.clear_collection()
+        assert self.storage.get_document_count() == 0
+        assert len(self.storage.read_raw()) == 0

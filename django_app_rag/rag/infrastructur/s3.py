@@ -7,7 +7,9 @@ from typing import Union
 import boto3
 import botocore
 import botocore.config
-from loguru import logger
+from django_app_rag.rag.logging_setup import get_logger
+
+logger = get_logger(__name__)
 
 from ..settings import settings
 

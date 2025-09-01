@@ -1,6 +1,8 @@
 import os.path
 from pathlib import Path
-from loguru import logger
+from django_app_rag.rag.logging_setup import get_logger
+
+logger = get_logger(__name__)
 import faiss
 from typing import Any, Dict, List, Optional
 from langchain.embeddings.base import Embeddings

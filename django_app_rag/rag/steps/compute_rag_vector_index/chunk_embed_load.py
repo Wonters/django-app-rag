@@ -2,7 +2,9 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Any, Generator
 from langchain_core.documents import Document as LangChainDocument
 from langchain_text_splitters import RecursiveCharacterTextSplitter
-from loguru import logger
+from django_app_rag.rag.logging_setup import get_logger
+
+logger = get_logger(__name__)
 from tqdm import tqdm
 from zenml.steps import step
 from django_app_rag.rag.retrievers import (

@@ -1,4 +1,4 @@
-import { ref, onBeforeUnmount } from 'vue';
+import { ref } from 'vue';
 import $ from 'jquery';
 import 'datatables.net-bs5';
 
@@ -13,9 +13,9 @@ export function useDataTable(options = {}) {
     order: [[0, 'asc']],
     columnDefs: [],
     responsive: true,
-    language: {
+    //language: {
       // url: '//cdn.datatables.net/plug-ins/1.13.7/i18n/fr-FR.json'
-    },
+    //},
     ...options
   };
 
@@ -25,14 +25,14 @@ export function useDataTable(options = {}) {
       return;
     }
     
-    if (!tableRef.value || !document.contains(tableRef.value)) {
-      console.warn('Table element not found or not in DOM, skipping DataTable initialization');
+    if (!tableRef.value) {
+      console.warn('Table ref not available, skipping DataTable initialization');
       return;
     }
     
-    // Vérifier si l'élément a un parentNode (nécessaire pour DataTables)
-    if (!tableRef.value.parentNode) {
-      console.warn('Table element has no parentNode, skipping DataTable initialization');
+    // Vérifier que le tableau a des données avant d'initialiser DataTables
+    if (!tableRef.value.querySelector('tbody tr')) {
+      console.warn('Table has no data rows, skipping DataTable initialization');
       return;
     }
     
@@ -58,15 +58,10 @@ export function useDataTable(options = {}) {
         }
       }
       
-      // Vérifier à nouveau que l'élément existe et est dans le DOM
-      if (!tableRef.value || !document.contains(tableRef.value)) {
-        console.warn('Table element no longer available after cleanup, skipping initialization');
-        return;
-      }
-      
-      // Créer une nouvelle instance
+      // Créer une nouvelle instance directement
       dataTableInstance = $(tableRef.value).DataTable(defaultOptions);
       console.log('DataTable initialized successfully');
+      
     } catch (error) {
       console.warn('Erreur lors de l\'initialisation du DataTable:', error);
       dataTableInstance = null;
@@ -76,20 +71,41 @@ export function useDataTable(options = {}) {
   }
 
   function destroyDataTable() {
-    if (dataTableInstance && tableRef.value) {
-      try {
-        // Vérifier si le tableau est toujours dans le DOM et s'il a un parentNode
-        if (document.contains(tableRef.value) && tableRef.value.parentNode) {
-          // Vérifier si DataTables est initialisé avant de le détruire
-          if ($.fn.dataTable.isDataTable(tableRef.value)) {
-            dataTableInstance.destroy();
-          }
-        } else {
-          console.warn('Table element not in DOM or has no parentNode, skipping DataTable destruction');
+    try {
+      // Détruire l'instance locale si elle existe
+      if (dataTableInstance) {
+        try {
+          dataTableInstance.destroy();
+        } catch (error) {
+          console.warn('Error destroying local DataTable instance:', error);
         }
-      } catch (error) {
-        console.warn('Erreur lors de la destruction du DataTable:', error);
+        dataTableInstance = null;
       }
+      
+      // Vérifier et détruire l'instance jQuery si elle existe
+      if (tableRef.value && document.contains(tableRef.value)) {
+        try {
+          if ($.fn.dataTable.isDataTable(tableRef.value)) {
+            $(tableRef.value).DataTable().destroy();
+          }
+        } catch (error) {
+          console.warn('Error destroying jQuery DataTable instance:', error);
+        }
+      }
+      
+      // Nettoyer les classes et attributs DataTables restants
+      if (tableRef.value) {
+        try {
+          $(tableRef.value).removeClass('dataTable');
+          $(tableRef.value).removeAttr('id');
+          $(tableRef.value).find('thead, tbody').removeAttr('role');
+        } catch (error) {
+          console.warn('Error cleaning up DataTable classes:', error);
+        }
+      }
+    } catch (error) {
+      console.warn('Erreur lors de la destruction du DataTable:', error);
+    } finally {
       dataTableInstance = null;
     }
   }
@@ -104,10 +120,8 @@ export function useDataTable(options = {}) {
     }
   }
 
-  // Nettoyer automatiquement lors de la destruction du composant
-  onBeforeUnmount(() => {
-    destroyDataTable();
-  });
+  // Pas de onBeforeUnmount dans un composable - la gestion du cycle de vie
+  // doit être faite par le composant qui utilise ce composable
 
   return {
     tableRef,

@@ -1,6 +1,5 @@
 from zenml import step
 from typing_extensions import Annotated
-from django_app_rag.rag.models import Document
 from django_app_rag.rag.infrastructur.disk_storage import DiskStorage
 
 @step
@@ -19,11 +18,10 @@ def save_to_diskstorage(
         data_dir: Répertoire de données
         mode: Mode de sauvegarde - "overwrite" (écrase tout) ou "append" (ajoute)
     """
-    storage = DiskStorage(
-        model_class=Document, 
+    storage = DiskStorage( 
         collection_name=collection_name, 
         data_dir=data_dir
     )
     
-    storage.save(documents, mode=mode)
+    storage.save([doc.model_dump() for doc in documents], mode=mode)
     return True 

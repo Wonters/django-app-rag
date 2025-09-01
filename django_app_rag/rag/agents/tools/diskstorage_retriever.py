@@ -1,7 +1,9 @@
 import json
 from pathlib import Path
 import yaml
-from loguru import logger
+from django_app_rag.rag.logging_setup import get_logger
+
+logger = get_logger(__name__)
 from smolagents import Tool
 from django_app_rag.rag.monitoring.mlflow import mlflow_track
 from django_app_rag.rag.retrievers import get_retriever

@@ -1,5 +1,7 @@
 from typing import Literal, Union
-from loguru import logger
+from django_app_rag.rag.logging_setup import get_logger
+
+logger = get_logger(__name__)
 
 from django_app_rag.rag.infrastructur.faiss.retriever import FaissParentDocumentRetriever
 from .embeddings import EmbeddingModelType, EmbeddingsModel, get_embedding_model

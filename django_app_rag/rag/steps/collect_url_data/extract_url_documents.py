@@ -1,11 +1,16 @@
 from typing_extensions import Annotated
 from zenml import get_step_context, step
-from loguru import logger
+from django_app_rag.rag.logging_setup import get_logger
+
+logger = get_logger(__name__)
+import traceback
 
 from django_app_rag.rag.models import Document, DocumentMetadata
 from django_app_rag.rag.crawler import Crawl4AICrawler
 from django_app_rag.rag.utils import generate_random_hex
+from django_app_rag.rag.logging_setup import get_logger
 
+logger = get_logger(__name__)
 
 @step
 def extract_url_documents(
@@ -36,7 +41,6 @@ def extract_url_documents(
         )
         
         temp_document = Document(
-            id=document_id,
             metadata=document_metadata,
             parent_metadata=None,
             content="",  # Sera rempli par le crawler
@@ -45,8 +49,13 @@ def extract_url_documents(
         temp_documents.append(temp_document)
     
     # Utiliser le crawler existant pour extraire le contenu
-    crawler = Crawl4AICrawler(max_concurrent_requests=max_workers)
-    crawled_documents = crawler(temp_documents)
+    try:
+        crawler = Crawl4AICrawler(max_concurrent_requests=max_workers)
+        crawled_documents = crawler(temp_documents)
+    except Exception as e:
+        logger.info(f"Error extracting URL documents: {e}")
+        logger.error(traceback.format_exc())
+        return []
     
     # Retourner directement les objets Document
     for document in crawled_documents:

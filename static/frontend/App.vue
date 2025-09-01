@@ -26,7 +26,6 @@
     <!-- Section des documents -->
     <SourceSection 
       :selected-collection="selectedCollection"
-      @refresh="refreshCollections"
     />
 
     <!-- Formulaire de collection -->

@@ -22,6 +22,9 @@ export const QUESTION_EDIT_URL = window.QUESTION_EDIT_URL || '/questions/edit/';
 // URLs de l'analyse QA
 export const QA_API_URL = window.QA_API_URL || '/api/qa/';
 
+// URLs de l'indexation
+export const ETL_API_URL = window.ETL_API_URL || '/api/etl/';
+
 // Configuration générale
 export const API_CONFIG = {
   // URLs des collections

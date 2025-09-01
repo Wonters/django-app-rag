@@ -1,0 +1,43 @@
+# Configuration unifiée pour la collecte de données depuis différentes sources
+# Fichiers locaux
+file_paths:
+  - "data/input/documents/document1.txt"
+  - "data/input/documents/document2.md"
+  - "data/input/documents/document3.pdf"
+
+# URLs web
+urls:
+  - "https://example.com/article1"
+  - "https://example.com/article2"
+  - "https://example.com/documentation"
+
+# Bases de données Notion
+notion_database_ids:
+  - "database_id_1"
+  - "database_id_2"
+
+data_dir: "data"
+to_s3: false
+max_workers: 10 
+collection_name: "mixed_collection"
+quality_agent_model_id: "gpt-4o-mini"
+quality_agent_mock: true
+include_notion: true
+include_files: true
+include_urls: true 
+
+fetch_limit: 200
+content_quality_score_threshold: 0.6
+retriever_type: parent
+embedding_model_id: sentence-transformers/all-MiniLM-L6-v2 #text-embedding-3-small
+embedding_model_type: huggingface
+embedding_model_dim: 1536
+chunk_size: 640
+contextual_summarization_type: simple
+contextual_agent_model_id: gpt-4o-mini
+contextual_agent_max_characters: 128
+mock: false
+processing_batch_size: 2
+processing_max_workers: 2
+device: cpu # or cuda (for Nvidia GPUs) or mps (for Apple M1/M2/M3 chips)
+storage_mode: overwrite

@@ -10,12 +10,12 @@ from django_app_rag.rag.models import Document
 def save_documents_to_disk(
     documents: list,
     output_dir: Path,
+    storage_mode: str = "overwrite",
 ) -> Annotated[str, "output"]:
-    if output_dir.exists():
-        shutil.rmtree(output_dir)
-    output_dir.mkdir(parents=True)
-    for file in output_dir.glob("*"):
-        file.unlink()
+    output_dir.mkdir(parents=True, exist_ok=True)
+    if storage_mode == "overwrite":
+        for file in output_dir.glob("*"):
+            file.unlink()
 
     # Sauvegarder chaque document
     for doc in documents:

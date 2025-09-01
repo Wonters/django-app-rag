@@ -3,7 +3,9 @@ import os
 
 import psutil
 from crawl4ai import AsyncWebCrawler, CacheMode
-from loguru import logger
+from django_app_rag.rag.logging_setup import get_logger
+
+logger = get_logger(__name__)
 from django_app_rag.rag.utils import generate_random_hex
 from django_app_rag.rag.models import Document, DocumentMetadata
 
@@ -130,7 +132,6 @@ class Crawl4AICrawler:
             document_id = generate_random_hex(length=32)
 
             return Document(
-                id=document_id,
                 metadata=DocumentMetadata(
                     id=document_id,
                     url=url,

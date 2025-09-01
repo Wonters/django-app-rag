@@ -1,6 +1,10 @@
-data_dir: data
-collection_name: collection_1
+# Configuration pour le pipeline ETL mixte (Notion + Fichiers + URLs)
+data_dir: "data"
+collection_name: "mixed_collection"
 to_s3: false
 max_workers: 10
-quality_agent_model_id: gpt-4o-mini
-quality_agent_mock: false 
+quality_agent_model_id: "gpt-4o-mini"
+quality_agent_mock: true
+include_notion: true
+include_files: true
+include_urls: true 

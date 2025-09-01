@@ -1,7 +1,6 @@
 from pathlib import Path
 from typing import Optional
 
-from loguru import logger
 from zenml import pipeline
 
 from ..steps.collect_file_data import extract_file_documents
@@ -11,7 +10,9 @@ from ..steps.collect_notion_data import (
     extract_notion_documents_metadata,
 )
 from ..steps.infrastructure import save_documents_to_disk, upload_to_s3
+from django_app_rag.rag.logging_setup import get_logger
 
+logger = get_logger(__name__)
 
 @pipeline(enable_cache=False)
 def collect_data(
@@ -21,6 +22,7 @@ def collect_data(
     notion_database_ids: Optional[list[str]] = None,
     to_s3: bool = False,
     max_workers: int = 10,
+    storage_mode: str = "overwrite",
 ) -> None:
     """
     Pipeline unifiée pour collecter des données depuis différentes sources :
@@ -37,7 +39,8 @@ def collect_data(
         max_workers: Nombre maximum de workers pour le traitement des URLs
     """
     invocation_ids = []
-    
+    if storage_mode == "append":
+        data_dir = data_dir / "tmp"
     # Collecte des données depuis les fichiers
     if file_paths:
         file_data_dir = data_dir / "files"
@@ -49,6 +52,7 @@ def collect_data(
         result = save_documents_to_disk(
             documents=documents_data,
             output_dir=file_data_dir,
+            storage_mode=storage_mode,
         )
         invocation_ids.append(result.invocation_id)
     
@@ -63,6 +67,7 @@ def collect_data(
         result = save_documents_to_disk(
             documents=documents_data,
             output_dir=url_data_dir,
+            storage_mode=storage_mode,
         )
         invocation_ids.append(result.invocation_id)
     
@@ -79,6 +84,7 @@ def collect_data(
             result = save_documents_to_disk(
                 documents=documents_data,
                 output_dir=notion_data_dir / f"database_{index}",
+                storage_mode=storage_mode,
             )
             invocation_ids.append(result.invocation_id)
     
