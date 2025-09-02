@@ -410,7 +410,7 @@ class LaunchQAView(APIView, TaskViewMixin):
             )
         
         # Construire le chemin vers le fichier de configuration de la collection
-        config_path = collection.rag_index_config()
+        config_path = collection.get_rag_config()
         
         # Vérifier que le fichier de configuration existe
         if not Path(config_path).exists():

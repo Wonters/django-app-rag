@@ -118,6 +118,7 @@ def index(config):
         mock=cfg.get("mock"),
         data_dir=cfg.get("data_dir", "data"),
         device=cfg.get("device"),
+        mode=cfg.get("mode", "overwrite"),
     )
 
 

@@ -1,5 +1,6 @@
 from zenml import pipeline
 from django_app_rag.rag.logging_setup import get_logger
+from typing import Union
 
 logger = get_logger(__name__)
 from ..embeddings import EmbeddingModelType
@@ -27,7 +28,9 @@ def compute_rag_vector_index(
     processing_batch_size: int = 256,
     processing_max_workers: int = 10,
     device: str = "cpu",
-    data_dir: str = "data"
+    data_dir: str = "data",
+    mode : str = "overwrite",
+    id_documents: Union[list[str], None] = None
 ) -> None:
     """Computes and stores RAG vector index from documents in DiskStorage.
 
@@ -56,7 +59,7 @@ def compute_rag_vector_index(
         None
     """
     documents = read_documents_from_diskstorage(
-        collection_name=collection_name, limit=fetch_limit, data_dir=data_dir
+        collection_name=collection_name, limit=fetch_limit, data_dir=data_dir, mode=mode, id_documents=id_documents
     )
 
     documents_filtered = filter_by_quality(

@@ -14,7 +14,7 @@
       <!-- Vue liste des documents -->
       <SourceList 
         v-if="currentView === 'list' && selectedCollection"
-        :key="`source-list-${selectedCollection.id}-${collectionKey}`"
+        :key="`source-list-${selectedCollection.id}`"
         :collection-id="selectedCollection.id"
         :selected-collection="selectedCollection"
         @view-details="viewSourceDetails"
@@ -57,7 +57,6 @@ const props = defineProps({
 // État de navigation
 const currentView = ref('list'); // 'list' ou 'detail'
 const selectedSource = ref(null);
-const collectionKey = ref(0); // Clé pour forcer la recréation du composant
 
 // Fonctions de navigation
 function viewSourceDetails(source) {
@@ -83,14 +82,14 @@ function goBackToList() {
 // Watcher pour réinitialiser la vue quand la collection change
 watch(() => props.selectedCollection, async (newCollection, oldCollection) => {
   if (newCollection?.id !== oldCollection?.id) {
-    logger.log('Collection changed, resetting to list view and recreating SourceList component');
+    logger.log('Collection changed, resetting to list view');
     
     // Utiliser nextTick pour éviter les conflits de réactivité
     await nextTick();
     
     currentView.value = 'list';
     selectedSource.value = null;
-    logger.log('View reset completed and SourceList component will be recreated');
+    logger.log('View reset completed - SourceList component will preserve polling state');
   }
 });
 </script> 

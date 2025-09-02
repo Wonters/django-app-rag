@@ -190,10 +190,9 @@ def extract_file_documents(
                 docling_used = False
                 processing_method = "fallback_text_reading"
             
-
-            
+            # L'ID sera généré automatiquement par le constructeur de Document basé sur le contenu
             document_metadata = DocumentMetadata(
-                id=document_id,
+                id="",  # ID temporaire, sera remplacé par le constructeur
                 url=str(file_path),
                 title=file_path.name,
                 source_type="file",
@@ -228,9 +227,9 @@ def extract_file_documents(
                 logger.info(f"Attempting fallback text reading for {file_path}")
                 content = _safe_text_fallback(file_path)
                 
-                document_id = utils.generate_random_hex(length=32)
+                # L'ID sera généré automatiquement par le constructeur de Document basé sur le contenu
                 document_metadata = DocumentMetadata(
-                    id=document_id,
+                    id="",  # ID temporaire, sera remplacé par le constructeur
                     url=str(file_path),
                     title=file_path.name,
                     source_type="file",

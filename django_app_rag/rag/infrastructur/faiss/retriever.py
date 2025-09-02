@@ -146,6 +146,9 @@ class FaissParentDocumentRetriever(ParentDocumentRetriever):
         # Vérifier les IDs avant l'ajout
         self._validate_document_ids(documents)
         
+        # Vérifier si le batch n'est pas déjà indexé
+        self._validate_batch_not_already_indexed(documents)
+        
         # Embed documents and add to vectorstore
         super().add_documents(documents, ids, add_to_docstore, **kwargs)
         # Save vectorstore on disk to persistency
@@ -194,6 +197,64 @@ class FaissParentDocumentRetriever(ParentDocumentRetriever):
             logger.warning(f"⚠️  {len(docs_without_id)} documents sans ID détectés")
         else:
             logger.info("✅ Tous les documents ont un ID")
+
+    def _validate_batch_not_already_indexed(self, documents: list[Document]):
+        """
+        Valide que le batch de documents n'est pas déjà indexé dans le vectorstore.
+        """
+        logger.info(f"🔍 Validation que le batch n'est pas déjà indexé pour {len(documents)} documents")
+        
+        # Collecter tous les IDs du batch
+        batch_ids = set()
+        for doc in documents:
+            doc_id = doc.metadata.get("id")
+            if doc_id:
+                batch_ids.add(doc_id)
+        
+        if not batch_ids:
+            logger.warning("⚠️  Aucun ID trouvé dans le batch, impossible de vérifier l'indexation")
+            return
+        
+        # Vérifier quels IDs sont déjà dans l'index
+        already_indexed_ids = set()
+        
+        # Parcourir le mapping index_to_docstore_id pour trouver les IDs déjà présents
+        if hasattr(self.vectorstore, 'index_to_docstore_id'):
+            existing_ids = set(self.vectorstore.index_to_docstore_id.values())
+            already_indexed_ids = batch_ids.intersection(existing_ids)
+        
+        if already_indexed_ids:
+            logger.error(f"🚨 BATCH DÉJÀ INDEXÉ DÉTECTÉ: {len(already_indexed_ids)} documents déjà présents dans l'index!")
+            
+            for doc_id in already_indexed_ids:
+                logger.error(f"   - ID '{doc_id}' est déjà indexé")
+                
+                # Afficher le contenu du document déjà indexé
+                duplicate_docs = [doc for doc in documents if doc.metadata.get("id") == doc_id]
+                for i, doc in enumerate(duplicate_docs):
+                    content_preview = doc.page_content[:100] + "..." if len(doc.page_content) > 100 else doc.page_content
+                    logger.error(f"     Document {i+1}: '{content_preview}'")
+            
+            # Calculer le pourcentage de documents déjà indexés
+            percentage = (len(already_indexed_ids) / len(batch_ids)) * 100
+            logger.error(f"📊 {percentage:.1f}% du batch est déjà indexé ({len(already_indexed_ids)}/{len(batch_ids)})")
+            
+            # Recommander une action
+            if percentage >= 80:
+                logger.error("🚨 RECOMMANDATION: Le batch semble être majoritairement déjà indexé. Vérifiez la logique d'indexation.")
+            elif percentage >= 50:
+                logger.warning("⚠️  RECOMMANDATION: Plus de la moitié du batch est déjà indexé. Vérifiez la logique d'indexation.")
+            else:
+                logger.info("ℹ️  RECOMMANDATION: Quelques documents sont déjà indexés, mais le batch semble principalement nouveau.")
+        else:
+            logger.info("✅ Aucun document du batch n'est déjà indexé")
+        
+        # Vérifier les IDs uniques du batch qui seront ajoutés
+        new_ids = batch_ids - already_indexed_ids
+        if new_ids:
+            logger.info(f"✅ {len(new_ids)} nouveaux documents seront ajoutés à l'index")
+        else:
+            logger.warning("⚠️  Aucun nouveau document à ajouter - tous les documents du batch sont déjà indexés")
 
     def _get_relevant_documents(
         self, query: str, *, run_manager: CallbackManagerForRetrieverRun

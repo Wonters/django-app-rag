@@ -6,7 +6,7 @@ from crawl4ai import AsyncWebCrawler, CacheMode
 from django_app_rag.rag.logging_setup import get_logger
 
 logger = get_logger(__name__)
-from django_app_rag.rag.utils import generate_random_hex
+from django_app_rag.rag.utils import generate_content_hash
 from django_app_rag.rag.models import Document, DocumentMetadata
 
 
@@ -129,11 +129,10 @@ class Crawl4AICrawler:
             else:
                 title = ""
 
-            document_id = generate_random_hex(length=32)
-
+            # L'ID sera généré automatiquement par le constructeur de Document basé sur le contenu
             return Document(
                 metadata=DocumentMetadata(
-                    id=document_id,
+                    id="",  # ID temporaire, sera remplacé par le constructeur
                     url=url,
                     title=title,
                     source_type="url",

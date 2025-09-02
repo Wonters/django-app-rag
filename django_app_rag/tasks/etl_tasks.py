@@ -2,13 +2,14 @@ import dramatiq
 from pathlib import Path
 from django.conf import settings
 from django_app_rag.logging import get_logger
+from django_app_rag.rag.logging_setup import get_thread_safe_logger
 import subprocess as sp
 import sys
 from django_app_rag.models import Collection, Source
 from django.utils import timezone
 import traceback
 
-logger = get_logger(__name__)
+logger = get_thread_safe_logger(__name__)
 
 SCRIPT_PATH = Path(__file__).parent.parent / "rag" / "run.py"
 

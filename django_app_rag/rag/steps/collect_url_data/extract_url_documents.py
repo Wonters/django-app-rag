@@ -7,7 +7,7 @@ import traceback
 
 from django_app_rag.rag.models import Document, DocumentMetadata
 from django_app_rag.rag.crawler import Crawl4AICrawler
-from django_app_rag.rag.utils import generate_random_hex
+from django_app_rag.rag.utils import generate_content_hash
 from django_app_rag.rag.logging_setup import get_logger
 
 logger = get_logger(__name__)
@@ -31,16 +31,19 @@ def extract_url_documents(
     # Créer des documents temporaires avec les URLs pour utiliser le crawler
     temp_documents = []
     for url in urls:
-        document_id = generate_random_hex(length=32)
+        # Créer un ID temporaire basé sur l'URL pour les documents temporaires
+        temp_id = generate_content_hash(url)
         document_metadata = DocumentMetadata(
-            id=document_id,
+            id=temp_id,  # ID temporaire pour les documents de référence
             url=url,
             title="",  # Sera rempli par le crawler
             source_type="url",
             properties={"url": url}
         )
         
+        # Créer le document temporaire avec l'ID spécifié (pas de génération automatique)
         temp_document = Document(
+            id=temp_id,  # ID explicite pour éviter la génération automatique
             metadata=document_metadata,
             parent_metadata=None,
             content="",  # Sera rempli par le crawler
@@ -58,9 +61,10 @@ def extract_url_documents(
         return []
     
     # Retourner directement les objets Document
+    # Note: Les documents retournés par le crawler ont des IDs basés sur le contenu récupéré
     for document in crawled_documents:
         documents.append(document)
-        logger.info(f"Successfully extracted document from {document.metadata.url}")
+        logger.info(f"Successfully extracted document from {document.metadata.url} with content-based ID: {document.id}")
 
     step_context = get_step_context()
     step_context.add_output_metadata(

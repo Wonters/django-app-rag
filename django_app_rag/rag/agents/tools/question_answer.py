@@ -69,16 +69,16 @@ class QuestionAnswerTool(Tool):
         try:
             question = self.__parse_question(question)
             
-            print(f"🔍 QuestionAnswerTool - Question: {question}")
-            print(f"🔍 QuestionAnswerTool - Retrieved documents length: {len(retrieved_documents)}")
+            logger.info(f"QuestionAnswerTool - Question: {question}")
+            logger.info(f"QuestionAnswerTool - Retrieved documents length: {len(retrieved_documents)}")
             
             # Parse the retrieved documents from the retriever tool output
             documents = self.__parse_retrieved_documents(retrieved_documents)
             
-            print(f"🔍 QuestionAnswerTool - Parsed {len(documents)} documents")
+            logger.info(f"QuestionAnswerTool - Parsed {len(documents)} documents")
             
             if not documents:
-                print("❌ QuestionAnswerTool - No documents found")
+                logger.warning("QuestionAnswerTool - No documents found")
                 return json.dumps([{
                     "answer": "Aucun document pertinent trouvé pour répondre à cette question.",
                     "question_id": str(uuid.uuid4()),
@@ -87,12 +87,12 @@ class QuestionAnswerTool(Tool):
 
             # Log the number of documents found
             logger.info(f"Processing {len(documents)} retrieved documents")
-            print(f"✅ QuestionAnswerTool - Processing {len(documents)} documents")
+            logger.info(f"QuestionAnswerTool - Processing {len(documents)} documents")
 
             # Check if documents have actual content
             documents_with_content = [doc for doc in documents if doc.get("content", "").strip()]
             if not documents_with_content:
-                print("❌ QuestionAnswerTool - No documents with content found")
+                logger.warning("QuestionAnswerTool - No documents with content found")
                 return json.dumps([{
                     "answer": "Aucun document pertinent trouvé pour répondre à cette question.",
                     "question_id": str(uuid.uuid4()),
@@ -122,13 +122,13 @@ class QuestionAnswerTool(Tool):
                         "chunk_preview": chunk_info.get("chunk_preview")
                     })
                     
-                    print(f"🔍 QuestionAnswerTool - Document {i}: {doc.get('title', '')[:50]}...")
-                    print(f"   📊 Score: {doc.get('score')}")
-                    print(f"   📏 Longueur du chunk: {chunk_info.get('chunk_length')} caractères")
-                    print(f"   📝 Aperçu: {chunk_info.get('chunk_preview', '')[:80]}...")
+                    logger.debug(f"QuestionAnswerTool - Document {i}: {doc.get('title', '')[:50]}...")
+                    logger.debug(f"   Score: {doc.get('score')}")
+                    logger.debug(f"   Longueur du chunk: {chunk_info.get('chunk_length')} caractères")
+                    logger.debug(f"   Aperçu: {chunk_info.get('chunk_preview', '')[:80]}...")
                     
                     if not chunk_info.get("is_unique_chunk"):
-                        print(f"   ⚠️  Doublon détecté: {chunk_info.get('duplicate_of')}")
+                        logger.debug(f"   Doublon détecté: {chunk_info.get('duplicate_of')}")
                 
                 sources.append(source_info)
                 context_parts.append(doc.get("content", ""))
@@ -136,13 +136,13 @@ class QuestionAnswerTool(Tool):
             # Create context for answer generation
             context = "\n\n".join(context_parts)
             
-            print(f"🔍 QuestionAnswerTool - Context length: {len(context)} characters")
+            logger.info(f"QuestionAnswerTool - Context length: {len(context)} characters")
             
             # Generate concise answer using LLM
             answer = self.__generate_concise_answer_with_llm(question, context)
             
             logger.info(f"Generated answer: {answer[:100]}...")
-            print(f"✅ QuestionAnswerTool - Generated answer: {answer[:100]}...")
+            logger.info(f"QuestionAnswerTool - Generated answer: {answer[:100]}...")
             
             # Return JSON response
             response = {
@@ -151,13 +151,13 @@ class QuestionAnswerTool(Tool):
                 "sources": sources
             }
             
-            print(f"✅ QuestionAnswerTool - Returning response with {len(sources)} sources")
+            logger.info(f"QuestionAnswerTool - Returning response with {len(sources)} sources")
             
             return json.dumps(response, ensure_ascii=False)
             
         except Exception as e:
             logger.opt(exception=True).error(f"Error answering question: {e}")
-            print(f"❌ QuestionAnswerTool - Error: {e}")
+            logger.error(f"QuestionAnswerTool - Error: {e}")
             return json.dumps([{
                 "answer": f"Error answering question: {str(e)}",
                 "question_id": str(uuid.uuid4()),
@@ -180,7 +180,7 @@ class QuestionAnswerTool(Tool):
         """
         documents = []
         
-        print(f"🔍 QuestionAnswerTool - Parsing documents from: {retrieved_documents[:200]}...")
+        logger.debug(f"QuestionAnswerTool - Parsing documents from: {retrieved_documents[:200]}...")
         
         try:
             # Parse the JSON response from the retriever tool
@@ -188,16 +188,16 @@ class QuestionAnswerTool(Tool):
             
             if "documents" in data:
                 documents = data["documents"]
-                print(f"🔍 QuestionAnswerTool - Found {len(documents)} documents in JSON")
+                logger.info(f"QuestionAnswerTool - Found {len(documents)} documents in JSON")
                 
                 for doc in documents:
-                    print(f"🔍 QuestionAnswerTool - Parsed document {doc.get('id')} (score {doc.get('score')}): {doc.get('title', '')[:50]}...")
+                    logger.debug(f"QuestionAnswerTool - Parsed document {doc.get('id')} (score {doc.get('score')}): {doc.get('title', '')[:50]}...")
             else:
-                print("❌ QuestionAnswerTool - No 'documents' key found in JSON response")
+                logger.warning("QuestionAnswerTool - No 'documents' key found in JSON response")
                 
         except json.JSONDecodeError as e:
             logger.warning(f"Error parsing JSON from retrieved documents: {e}")
-            print(f"❌ QuestionAnswerTool - Error parsing JSON: {e}")
+            logger.warning(f"QuestionAnswerTool - Error parsing JSON: {e}")
             
             # Try to handle Python dict representation (single quotes instead of double quotes)
             try:
@@ -207,12 +207,12 @@ class QuestionAnswerTool(Tool):
                 
                 if "documents" in data:
                     documents = data["documents"]
-                    print(f"🔍 QuestionAnswerTool - Found {len(documents)} documents after cleaning Python dict")
+                    logger.info(f"QuestionAnswerTool - Found {len(documents)} documents after cleaning Python dict")
                     
                     for doc in documents:
-                        print(f"🔍 QuestionAnswerTool - Parsed documents {doc.get('id')} (score {doc.get('score')}): {doc.get('title', '')[:50]}...")
+                        logger.debug(f"QuestionAnswerTool - Parsed documents {doc.get('id')} (score {doc.get('score')}): {doc.get('title', '')[:50]}...")
                 else:
-                    print("❌ QuestionAnswerTool - No 'documents' key found in cleaned data")
+                    logger.warning("QuestionAnswerTool - No 'documents' key found in cleaned data")
                     # Fallback: try to extract any text content
                     documents.append({
                         "id": None,
@@ -224,7 +224,7 @@ class QuestionAnswerTool(Tool):
                     
             except Exception as cleanup_error:
                 logger.warning(f"Error parsing cleaned retrieved documents: {cleanup_error}")
-                print(f"❌ QuestionAnswerTool - Error parsing cleaned documents: {cleanup_error}")
+                logger.warning(f"QuestionAnswerTool - Error parsing cleaned documents: {cleanup_error}")
                 # Fallback: try to extract any text content
                 documents.append({
                     "id": None,
@@ -235,7 +235,7 @@ class QuestionAnswerTool(Tool):
                 })
         except Exception as e:
             logger.warning(f"Error parsing retrieved documents: {e}")
-            print(f"❌ QuestionAnswerTool - Error parsing documents: {e}")
+            logger.warning(f"QuestionAnswerTool - Error parsing documents: {e}")
             # Fallback: try to extract any text content
             documents.append({
                 "id": None,
@@ -245,7 +245,7 @@ class QuestionAnswerTool(Tool):
                 "content": retrieved_documents
             })
         
-        print(f"✅ QuestionAnswerTool - Successfully parsed {len(documents)} documents")
+        logger.info(f"QuestionAnswerTool - Successfully parsed {len(documents)} documents")
         return documents
 
     def __generate_concise_answer_with_llm(self, question: str, context: str) -> str:
@@ -253,11 +253,11 @@ class QuestionAnswerTool(Tool):
         Generate a concise answer using LLM based on the retrieved documents.
         """
         if not context.strip():
-            print("❌ QuestionAnswerTool - Empty context, returning 'Aucun documents'")
+            logger.warning("QuestionAnswerTool - Empty context, returning 'Aucun documents'")
             return "Aucun documents"
         
-        print(f"🔍 QuestionAnswerTool - Generating answer for question: {question}")
-        print(f"🔍 QuestionAnswerTool - Context preview: {context[:200]}...")
+        logger.info(f"QuestionAnswerTool - Generating answer for question: {question}")
+        logger.debug(f"QuestionAnswerTool - Context preview: {context[:200]}...")
         
         # Prompt for concise answer generation
         answer_prompt = f"""
@@ -276,23 +276,23 @@ class QuestionAnswerTool(Tool):
         """
         
         try:
-            print("🔍 QuestionAnswerTool - Calling LLM...")
+            logger.info("QuestionAnswerTool - Calling LLM...")
             response = self.client.chat.completions.create(
                 model="gpt-4o-mini",
                 messages=[{"role": "user", "content": answer_prompt}]
             )
             answer = response.choices[0].message.content.strip()
             
-            print(f"🔍 QuestionAnswerTool - LLM response: {answer[:200]}...")
+            logger.debug(f"QuestionAnswerTool - LLM response: {answer[:200]}...")
             
             # Check if the answer indicates no relevant information
             if "aucun document" in answer.lower() or "no relevant" in answer.lower() or "cannot answer" in answer.lower():
-                print("❌ QuestionAnswerTool - LLM indicated no relevant information")
+                logger.info("QuestionAnswerTool - LLM indicated no relevant information")
                 return self.not_found_answer
             
-            print(f"✅ QuestionAnswerTool - Generated answer successfully")
+            logger.info("QuestionAnswerTool - Generated answer successfully")
             return answer
         except Exception as e:
             logger.error(f"Error generating answer with LLM: {e}")
-            print(f"❌ QuestionAnswerTool - Error generating answer with LLM: {e}")
+            logger.error(f"QuestionAnswerTool - Error generating answer with LLM: {e}")
             return "Error generating answer" 

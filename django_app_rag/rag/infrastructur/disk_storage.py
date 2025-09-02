@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import Optional, Iterator, List
 from uuid import uuid4
 from django_app_rag.rag.logging_setup import get_logger
+from django_app_rag.rag.models import Document
 
 logger = get_logger(__name__)
 
@@ -108,6 +109,78 @@ class DiskStorage:
             return list(self.db.values())
         except Exception as e:
             logger.error(f"Erreur lors de la lecture du stockage: {e}")
+            return []
+
+    def read(self, ids_documents: Optional[List[str]] = None) -> List[Document]:
+        """
+        Lit les documents de la base de données avec filtrage optionnel par IDs.
+        Utilise des requêtes SQL directes pour une meilleure performance.
+        
+        Args:
+            ids_documents: Liste des IDs de documents à récupérer. Si None, retourne tous les documents.
+        
+        Returns:
+            Liste des objets Document correspondant aux IDs spécifiés, ou tous les documents si aucun filtre.
+        """
+        try:
+            if ids_documents is None:
+                # Si aucun filtre, retourner tous les documents
+                documents = []
+                for doc_data in self.db.values():
+                    try:
+                        doc = Document.model_validate(doc_data)
+                        documents.append(doc)
+                    except Exception as e:
+                        logger.warning(f"Erreur lors de la création du Document: {e}")
+                        continue
+                return documents
+            
+            if not ids_documents:
+                # Si liste vide, retourner liste vide
+                logger.info("Liste d'IDs vide, retour d'une liste vide")
+                return []
+            
+            # Utiliser une requête SQL directe pour le filtrage par IDs
+            conn = sqlite3.connect(self.path)
+            try:
+                # Construire la clause IN avec le bon nombre de placeholders
+                placeholders = ','.join(['?' for _ in ids_documents])
+                sql = f"SELECT value FROM {self.table} WHERE key IN ({placeholders})"
+                
+                # Exécuter la requête
+                cursor = conn.execute(sql, ids_documents)
+                documents = []
+                found_ids = []
+                
+                for (bval,) in cursor:
+                    try:
+                        doc_data = json.loads(bval)
+                        # Créer un objet Document à partir des données
+                        doc = Document.model_validate(doc_data)
+                        documents.append(doc)
+                        # Extraire l'ID du document pour le logging
+                        found_ids.append(doc.id)
+                    except json.JSONDecodeError as e:
+                        logger.warning(f"Erreur de décodage JSON pour un document: {e}")
+                        continue
+                    except Exception as e:
+                        logger.warning(f"Erreur lors de la création du Document: {e}")
+                        continue
+                
+                # Identifier les IDs manquants
+                missing_ids = [doc_id for doc_id in ids_documents if doc_id not in found_ids]
+                
+                logger.info(f"Récupération de {len(documents)} documents sur {len(ids_documents)} IDs demandés")
+                if missing_ids:
+                    logger.warning(f"IDs non trouvés: {missing_ids}")
+                
+                return documents
+                
+            finally:
+                conn.close()
+            
+        except Exception as e:
+            logger.error(f"Erreur lors de la lecture des documents avec filtrage: {e}")
             return []
 
     def clear_collection(self):

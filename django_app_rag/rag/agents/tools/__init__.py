@@ -110,17 +110,17 @@ class AgentWrapper:
         import json
         
         try:
-            print("🔍 Trying to extract QuestionAnswerTool response from memory steps...")
+            logger.debug("Trying to extract QuestionAnswerTool response from memory steps...")
             
             # Look through all memory steps for QuestionAnswerTool observations
             for step in self.__agent.memory.steps:
                 if hasattr(step, 'tool_calls') and step.tool_calls:
                     for tool_call in step.tool_calls:
                         if tool_call.name == "question_answer_tool":
-                            print(f"🔍 Found QuestionAnswerTool call in step")
+                            logger.debug("Found QuestionAnswerTool call in step")
                             # The observation should be in the step's observations
                             if hasattr(step, 'observations') and step.observations:
-                                print(f"🔍 Step observations: {step.observations[:200]}...")
+                                logger.debug(f"Step observations: {step.observations[:200]}...")
                                 
                                 # Try to extract JSON from the observations
                                 json_output = step.observations
@@ -128,13 +128,13 @@ class AgentWrapper:
                                     logger.info("Found QuestionAnswerTool JSON output from memory steps")
                                     return json_output
                                 else:
-                                    print("❌ No valid JSON found in step observations")
+                                    logger.warning("No valid JSON found in step observations")
             
-            print("❌ No QuestionAnswerTool found in memory steps")
+            logger.warning("No QuestionAnswerTool found in memory steps")
             return None
             
         except Exception as e:
             logger.warning(f"Error extracting JSON from memory steps: {e}")
-            print(f"🔴 Error in _extract_question_answer_json_from_steps: {e}")
+            logger.error(f"Error in _extract_question_answer_json_from_steps: {e}")
             return None
 

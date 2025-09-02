@@ -99,6 +99,8 @@
 <script setup>
 import { onMounted } from 'vue';
 import { launchCollectionInitialization } from '../services/tasks.js';
+import { usePollingState } from '../composables/usePollingState.js';
+import { useErrorHandler } from '../composables/useErrorHandler.js';
 
 const props = defineProps({
   collections: {
@@ -113,14 +115,69 @@ const props = defineProps({
 
 const emit = defineEmits(['select', 'edit', 'delete', 'create']);
 
+// Utilisation du composable de gestion des pollings
+const {
+  addActivePolling,
+  removeActivePolling,
+  updatePollingStatus
+} = usePollingState();
+
+// Utilisation du composable d'erreur
+const { showSuccess, showError, logger } = useErrorHandler();
+
 // Fonction pour initialiser une collection
-const initializeCollection = (collection) => {
-  // Lancer la tâche d'initialisation
-  launchCollectionInitialization(
-    collection.id,
-    collection, // Passer la collection pour mettre à jour son état
-    null // Pas d'élément spécifique à mettre à jour
-  );
+const initializeCollection = async (collection) => {
+  try {
+    logger.log('Lancement de l\'initialisation de la collection:', collection.id);
+    
+    // Mettre à jour le statut de la collection
+    collection.initializationStatus = 'pending';
+    
+    // Ajouter le polling au système de gestion d'état
+    const taskId = `collection_init_${collection.id}_${Date.now()}`;
+    addActivePolling(collection.id, 'initialization', taskId, {
+      maxAttempts: 60,
+      interval: 5000,
+      timeoutMessage: 'L\'initialisation de la collection prend trop de temps'
+    });
+
+    // Lancer la tâche d'initialisation avec la nouvelle signature
+    await launchCollectionInitialization(collection.id, {
+      onStatusUpdate: (status, data) => {
+        logger.log(`Statut d'initialisation mis à jour pour la collection ${collection.id}:`, status);
+        collection.initializationStatus = status;
+        // Mettre à jour le statut du polling
+        updatePollingStatus(collection.id, 'initialization', status);
+      },
+      onSuccess: (data) => {
+        logger.log('Initialisation de la collection terminée avec succès:', data);
+        collection.initializationStatus = 'completed';
+        // Supprimer le polling du système
+        removeActivePolling(collection.id, 'initialization');
+        showSuccess('Collection initialisée avec succès !');
+      },
+      onError: (error, data) => {
+        logger.error('Erreur lors de l\'initialisation de la collection:', error);
+        collection.initializationStatus = 'failed';
+        // Supprimer le polling du système
+        removeActivePolling(collection.id, 'initialization');
+        showError('Erreur lors de l\'initialisation de la collection');
+      },
+      onComplete: (finalStatus, data) => {
+        logger.log(`Initialisation de la collection ${collection.id} terminée avec le statut:`, finalStatus);
+        collection.initializationStatus = finalStatus;
+        // S'assurer que le polling est supprimé
+        removeActivePolling(collection.id, 'initialization');
+      }
+    });
+
+  } catch (error) {
+    logger.error('Erreur lors du lancement de l\'initialisation:', error);
+    collection.initializationStatus = 'failed';
+    // Supprimer le polling en cas d'erreur
+    removeActivePolling(collection.id, 'initialization');
+    showError('Erreur lors du lancement de l\'initialisation');
+  }
 };
 
 // Initialiser les tooltips Bootstrap

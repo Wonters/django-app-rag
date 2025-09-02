@@ -264,7 +264,7 @@ def launch_qa_process(source_id: int, config_path: str):
                 try:
                     logger.info(f"Récupération des documents pour la question: {question.field}")
                     documents = agent_retriever.forward(question.field)
-                    logger.info(f"Documents récupérés: {len(documents) if documents else 0} caractères")
+                    logger.info(f"Documents récupérés: {len(documents) if documents else 0}")
                     
                     if not documents:
                         logger.warning(f"Aucun document récupéré pour la question {question.title}")
@@ -290,7 +290,7 @@ def launch_qa_process(source_id: int, config_path: str):
                 # Parse the answer data
                 try:
                     answer_json = json.loads(answer_data)
-                    logger.info(f"Réponse parsée avec succès pour la question {question.title}")
+                    logger.info(f"Réponse parsée avec succès pour la question {question.title} {answer_json}")
                 except json.JSONDecodeError as json_error:
                     logger.error(f"Erreur de parsing JSON pour la question {question.title}: {json_error}")
                     logger.error(f"Données brutes: {answer_data}")

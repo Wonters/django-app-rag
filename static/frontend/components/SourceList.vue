@@ -132,6 +132,7 @@ import { launchQAAnalysis, launchIndexing } from '../services/tasks.js';
 import { useErrorHandler } from '../composables/useErrorHandler.js';
 import { useTooltips } from '../composables/useTooltips';
 import { useDataTable } from '../composables/useDataTable.js';
+import { usePollingState } from '../composables/usePollingState.js';
 import { SOURCE_API_URL, SOURCE_FORM_URL, SOURCE_EDIT_URL, QA_API_URL, ETL_API_URL } from '../config/api.js';
 
 const { t } = useI18n();
@@ -152,6 +153,19 @@ const {
 
 // Utilisation du composable de tooltips
 const { initTooltips, destroyTooltips } = useTooltips();
+
+// Utilisation du composable de gestion des pollings
+const {
+  addActivePolling,
+  removeActivePolling,
+  updatePollingStatus,
+  hasActivePolling,
+  updateSourceStatus,
+  getSourceStatus,
+  restoreSourceStatuses,
+  applySourceStatuses,
+  clearAllPollings
+} = usePollingState();
 
 // Utilisation du composable DataTable
 const { tableRef, initDataTable, destroyDataTable, refreshDataTable } = useDataTable({
@@ -211,11 +225,15 @@ const sourceFormUrl = computed(() => {
 });
 
 
-const updateSourceStatus = (status, source) => {
+const updateLocalSourceStatus = (status, source, taskType = 'indexing') => {
       const sourceIndex = sources.value.findIndex(s => s.id === source.id);
       if (sourceIndex !== -1) {
-        sources.value[sourceIndex].indexing_status = status;
-        logger.log(`Statut d'indexation mis à jour pour la source ${source.id}: ${status}`);
+        if (taskType === 'qa') {
+          sources.value[sourceIndex].qa_status = status;
+        } else {
+          sources.value[sourceIndex].indexing_status = status;
+        }
+        logger.log(`Statut ${taskType} mis à jour pour la source ${source.id}: ${status}`);
       }
     };
 
@@ -234,7 +252,10 @@ async function fetchSources() {
     }
 
     const data = await response.json();
-    sources.value = Array.isArray(data) ? data : (data.results || []);
+    const fetchedSources = Array.isArray(data) ? data : (data.results || []);
+    
+    // Appliquer les statuts sauvegardés aux sources
+    sources.value = applySourceStatuses(fetchedSources);
 
     logger.log('Sources fetched successfully:', sources.value.length);
   } catch (error) {
@@ -378,18 +399,37 @@ function getIndexingTooltip(indexingStatus) {
 async function handleQAAnalysis(source) {
   try {
     logger.log('Lancement de l\'analyse QA pour la source:', source.id);
-    updateSourceStatus('pending', source);
+    
+    // Mettre à jour le statut local et global
+    updateLocalSourceStatus('pending', source, 'qa');
+    updateSourceStatus(source.id, 'qa', 'pending');
+    
     await new Promise(resolve => setTimeout(resolve, 100));
-    updateSourceStatus('running', source);
+    updateLocalSourceStatus('running', source, 'qa');
+    updateSourceStatus(source.id, 'qa', 'running');
+
+    // Ajouter le polling au système de gestion d'état
+    const taskId = `qa_${source.id}_${Date.now()}`;
+    addActivePolling(source.id, 'qa', taskId, {
+      maxAttempts: 60,
+      interval: 5000,
+      timeoutMessage: 'L\'analyse QA prend trop de temps'
+    });
 
     await launchQAAnalysis(source, QA_API_URL, {
       onStatusUpdate: (status, data) => {
         logger.log(`Statut QA mis à jour pour la source ${source.id}:`, status);
-        updateSourceStatus(status, source);
+        updateLocalSourceStatus(status, source, 'qa');
+        updateSourceStatus(source.id, 'qa', status);
+        // Mettre à jour le statut du polling
+        updatePollingStatus(source.id, 'qa', status);
       },
       onSuccess: (data) => {
         logger.log('Analyse QA terminée avec succès:', data);
-        updateSourceStatus('completed', source);
+        updateLocalSourceStatus('completed', source, 'qa');
+        updateSourceStatus(source.id, 'qa', 'completed');
+        // Supprimer le polling du système
+        removeActivePolling(source.id, 'qa');
         showSuccess(t('Analyse terminée avec succès !'));
         // Recharger les données pour afficher les nouvelles réponses
         setTimeout(async () => {
@@ -398,33 +438,64 @@ async function handleQAAnalysis(source) {
       },
       onError: (error, data) => {
         logger.error('Erreur lors de l\'analyse QA:', error);
-        updateSourceStatus('failed', source);
+        updateLocalSourceStatus('failed', source, 'qa');
+        updateSourceStatus(source.id, 'qa', 'failed');
+        // Supprimer le polling du système
+        removeActivePolling(source.id, 'qa');
         handleApiError(error, t('Erreur lors de l\'analyse'));
       },
       onComplete: (finalStatus, data) => {
         logger.log(`Analyse QA terminée pour la source ${source.id} avec le statut:`, finalStatus);
-        updateSourceStatus(finalStatus, source);
+        updateLocalSourceStatus(finalStatus, source, 'qa');
+        updateSourceStatus(source.id, 'qa', finalStatus);
+        // S'assurer que le polling est supprimé
+        removeActivePolling(source.id, 'qa');
       }
     });
 
   } catch (error) {
     logger.error('Erreur lors du lancement de l\'analyse QA:', error);
-    updateSourceStatus(null, source);
+    updateLocalSourceStatus(null, source, 'qa');
+    updateSourceStatus(source.id, 'qa', null);
+    // Supprimer le polling en cas d'erreur
+    removeActivePolling(source.id, 'qa');
   }
 }
 
 async function handleSourceIndexing(source) {
   try{
     logger.log('Lancement de l\'indexation pour la source:', source.id);
+    
+    // Mettre à jour le statut local et global
+    updateLocalSourceStatus('pending', source, 'indexing');
+    updateSourceStatus(source.id, 'indexing', 'pending');
+    
+    await new Promise(resolve => setTimeout(resolve, 100));
+    updateLocalSourceStatus('running', source, 'indexing');
+    updateSourceStatus(source.id, 'indexing', 'running');
+
+    // Ajouter le polling au système de gestion d'état
+    const taskId = `indexing_${source.id}_${Date.now()}`;
+    addActivePolling(source.id, 'indexing', taskId, {
+      maxAttempts: 60,
+      interval: 5000,
+      timeoutMessage: 'L\'indexation prend trop de temps'
+    });
 
     await launchIndexing(source, ETL_API_URL, {
       onStatusUpdate: (status, data) => {
         logger.log(`Statut d'indexation mis à jour pour la source ${source.id}:`, status);
-        updateSourceStatus(status, source);
+        updateLocalSourceStatus(status, source, 'indexing');
+        updateSourceStatus(source.id, 'indexing', status);
+        // Mettre à jour le statut du polling
+        updatePollingStatus(source.id, 'indexing', status);
       },
       onSuccess: (data) => {
         logger.log('Indexation terminée avec succès:', data);
-        updateSourceStatus('completed', source);
+        updateLocalSourceStatus('completed', source, 'indexing');
+        updateSourceStatus(source.id, 'indexing', 'completed');
+        // Supprimer le polling du système
+        removeActivePolling(source.id, 'indexing');
         showSuccess(t('Indexation terminée avec succès !'));
         // Recharger les données pour afficher les nouvelles réponses
         setTimeout(async () => {
@@ -433,17 +504,27 @@ async function handleSourceIndexing(source) {
       },
       onError: (error, data) => {
         logger.error('Erreur lors de l\'indexation:', error);
-        updateSourceStatus('failed', source);
+        updateLocalSourceStatus('failed', source, 'indexing');
+        updateSourceStatus(source.id, 'indexing', 'failed');
+        // Supprimer le polling du système
+        removeActivePolling(source.id, 'indexing');
         handleApiError(error, t('Erreur lors de l\'indexation'));
       },
       onComplete: (finalStatus, data) => {
         logger.log(`Indexation terminée pour la source ${source.id} avec le statut:`, finalStatus);
-        updateSourceStatus(finalStatus, source);
+        updateLocalSourceStatus(finalStatus, source, 'indexing');
+        updateSourceStatus(source.id, 'indexing', finalStatus);
+        // S'assurer que le polling est supprimé
+        removeActivePolling(source.id, 'indexing');
       }
     });
   }
   catch(error){
     logger.error('Erreur lors du lancement de l\'indexation:', error);
+    updateLocalSourceStatus(null, source, 'indexing');
+    updateSourceStatus(source.id, 'indexing', null);
+    // Supprimer le polling en cas d'erreur
+    removeActivePolling(source.id, 'indexing');
   }
 }
 
@@ -461,7 +542,9 @@ onMounted(async () => {
 onBeforeUnmount(() => {
   destroyDataTable();
   destroyTooltips();
-
+  
+  // Nettoyer les pollings actifs pour cette collection
+  // Note: On ne nettoie pas tous les pollings car ils peuvent être partagés entre collections
   logger.log('Composant SourceList démonté, ressources nettoyées');
 });
 

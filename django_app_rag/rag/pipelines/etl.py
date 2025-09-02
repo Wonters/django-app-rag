@@ -12,8 +12,7 @@ from ..steps.infrastructure import (
 )
 from ..steps.infrastructure.save_to_diskstorage import save_to_diskstorage
 
-
-@pipeline
+@pipeline(enable_cache=False)
 def etl_mixed(
     data_dir: Path,
     collection_name: str,
@@ -110,4 +109,25 @@ def etl_mixed(
 
     if storage_mode == "append":
         for directory in data_dir.iterdir():
-            directory.rename(directory.parent / directory.name)
+            target_dir = root_data_dir / directory.name
+            if target_dir.exists():
+                # Si le dossier existe déjà, fusionner le contenu
+                for item in directory.iterdir():
+                    if item.is_file():
+                        # Pour les fichiers, les déplacer directement
+                        item.rename(target_dir / item.name)
+                    elif item.is_dir():
+                        # Pour les dossiers, fusionner récursivement
+                        target_subdir = target_dir / item.name
+                        if target_subdir.exists():
+                            # Si le sous-dossier existe, fusionner son contenu
+                            for subitem in item.iterdir():
+                                subitem.rename(target_subdir / subitem.name)
+                            item.rmdir()  # Supprimer le dossier vide
+                        else:
+                            # Si le sous-dossier n'existe pas, le déplacer
+                            item.rename(target_subdir)
+                directory.rmdir()  # Supprimer le dossier vide
+            else:
+                # Si le dossier n'existe pas, le déplacer normalement
+                directory.rename(target_dir)

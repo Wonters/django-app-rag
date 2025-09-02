@@ -49,6 +49,9 @@
       @confirm="handleConfirm"
       @cancel="handleCancel"
     />
+
+    <!-- Indicateur de statut des pollings -->
+    <PollingStatusIndicator />
   </div>
 </template>
 
@@ -60,6 +63,7 @@ import SourceSection from './components/SourceSection.vue';
 import CollectionForm from './components/CollectionForm.vue';
 import NotificationToast from './components/NotificationToast.vue';
 import ConfirmationModal from './components/ConfirmationModal.vue';
+import PollingStatusIndicator from './components/PollingStatusIndicator.vue';
 import apiService from './services/apiService.js';
 import { useErrorHandler } from './composables/useErrorHandler.js';
 import { COLLECTION_API_URL, COLLECTION_EDIT_URL, COLLECTION_FORM_URL } from './config/api.js';

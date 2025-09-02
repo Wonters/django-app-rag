@@ -96,14 +96,14 @@ class DiskStorageRetrieverTool(Tool):
 
         try:
             query = self.__parse_query(query)
-            print(f"🔍 DiskStorageRetrieverTool - Searching for query: {query}")
+            logger.info(f"DiskStorageRetrieverTool - Searching for query: {query}")
             
             relevant_docs = self.retriever.invoke(query)
 
             # Log the number of documents found after filtering
             threshold = self._convert_numpy_types(self.retriever._similarity_score_threshold)
             logger.info(f"Found {len(relevant_docs)} documents with similarity score > {threshold * 100:.0f}%")
-            print(f"✅ DiskStorageRetrieverTool - Found {len(relevant_docs)} documents")
+            logger.info(f"DiskStorageRetrieverTool - Found {len(relevant_docs)} documents")
 
             formatted_docs = []
             for i, doc in enumerate(relevant_docs, 1):
@@ -140,7 +140,7 @@ class DiskStorageRetrieverTool(Tool):
             }
             
             json_result = json.dumps(result, ensure_ascii=False)
-            print(f"✅ DiskStorageRetrieverTool - Returning JSON with {len(formatted_docs)} documents")
+            logger.info(f"DiskStorageRetrieverTool - Returning JSON with {len(formatted_docs)} documents")
             return json_result
         except Exception as e:
             logger.opt(exception=True).error(f"Error retrieving documents: {e}")

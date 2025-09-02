@@ -3,9 +3,9 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_core.documents import Document as LangChainDocument
-from django_app_rag.rag.logging_setup import get_logger
+from django_app_rag.rag.logging_setup import get_thread_safe_logger
 
-logger = get_logger(__name__)
+logger = get_thread_safe_logger(__name__)
 
 import copy
 from .agents import (
@@ -133,7 +133,8 @@ class HandlerRecursiveCharacterTextSplitter(RecursiveCharacterTextSplitter):
             List[LangChainDocument]: List of document chunks for this text
         """
         chunks = self.split_text(text)
-        logger.info(f"Splitting text {text_index} into {len(chunks)} chunks")
+        # Use debug level to reduce logging in multi-threaded context
+        logger.debug(f"Splitting text {text_index} into {len(chunks)} chunks")
         documents = []
         
         # Récupérer l'ID du document parent
@@ -164,6 +165,7 @@ class HandlerRecursiveCharacterTextSplitter(RecursiveCharacterTextSplitter):
             
             # S'assurer que l'ID est bien défini
             if hasattr(new_doc, 'metadata') and 'id' in new_doc.metadata:
+                # Use debug level to reduce logging in multi-threaded context
                 logger.debug(f"Chunk créé: ID={new_doc.metadata['id']}, Parent={parent_id}, Index={chunk_index}")
             
             documents.append(new_doc)

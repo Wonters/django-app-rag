@@ -46,7 +46,12 @@ class Document(BaseModel):
         # Si l'ID n'est pas fourni, générer automatiquement un hash du contenu
         if 'id' not in data and 'content' in data:
             data['id'] = utils.generate_content_hash(data['content'])
+        
         super().__init__(**data)
+        
+        # Mettre à jour l'ID dans les métadonnées pour qu'il corresponde à l'ID du document
+        if hasattr(self, 'metadata') and self.metadata and self.metadata.id != self.id:
+            self.metadata.id = self.id
 
     @classmethod
     def from_file(cls, file_path: Path) -> "Document":

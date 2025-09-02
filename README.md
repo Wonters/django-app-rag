@@ -143,6 +143,12 @@ Télécharger depuis [UB-Mannheim](https://github.com/UB-Mannheim/tesseract/wiki
    pip install docling
    ```
 
+3. **Démarrer ZenML**
+   ```bash
+   zenml login --local --ip-address 0.0.0.0 --port 8001
+   ```
+   Cette commande démarre le serveur ZenML local nécessaire pour l'exécution des pipelines ML.
+
 ## Installation frontend
 1. **Aller dans le dossier static**
    ```bash

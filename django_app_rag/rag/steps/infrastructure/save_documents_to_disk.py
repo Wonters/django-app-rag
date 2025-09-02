@@ -1,10 +1,10 @@
-import shutil
 from pathlib import Path
 from typing_extensions import Annotated
 from zenml import get_step_context, step
-
+from django_app_rag.rag.logging_setup import get_thread_safe_logger
 from django_app_rag.rag.models import Document
 
+logger = get_thread_safe_logger(__name__)
 
 @step
 def save_documents_to_disk(
@@ -19,6 +19,7 @@ def save_documents_to_disk(
 
     # Sauvegarder chaque document
     for doc in documents:
+        logger.info(f"Saving document {doc.id} to {output_dir}")
         doc.write(output_dir=output_dir, obfuscate=True, also_save_as_txt=True)
 
     step_context = get_step_context()
