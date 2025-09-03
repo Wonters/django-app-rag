@@ -1,13 +1,11 @@
 import copy
 from typing import Callable
-
-from django_app_rag.rag.logging_setup import get_logger
-
-logger = get_logger(__name__)
-
+from django_app_rag.logging import get_logger_loguru
 from django_app_rag.rag.agents import SummarizationAgent
 from django_app_rag.rag.models import Document, InstructDataset, InstructDatasetSample
 
+
+logger = get_logger_loguru(__name__)
 
 class SummarizationDatasetGenerator:
     """Generates an instruction dataset from documents by creating summaries.

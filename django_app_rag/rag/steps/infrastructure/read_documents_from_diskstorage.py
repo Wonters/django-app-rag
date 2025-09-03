@@ -3,9 +3,9 @@ from typing import Union
 from typing_extensions import Annotated
 from django_app_rag.rag.models import Document
 from django_app_rag.rag.infrastructur.disk_storage import DiskStorage
-from django_app_rag.rag.logging_setup import get_logger
+from django_app_rag.logging import get_logger_loguru
 
-logger = get_logger(__name__)
+logger = get_logger_loguru(__name__)
 @step
 def read_documents_from_diskstorage(
     collection_name: str,

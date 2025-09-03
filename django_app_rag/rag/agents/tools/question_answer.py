@@ -2,9 +2,7 @@ import json
 import uuid
 from pathlib import Path
 from typing import Any
-from django_app_rag.rag.logging_setup import get_logger
-
-logger = get_logger(__name__)
+from django_app_rag.logging import get_logger_loguru
 from smolagents import Tool
 from django_app_rag.rag.monitoring.mlflow import mlflow_track
 from django_app_rag.rag.settings import settings
@@ -13,7 +11,7 @@ import mlflow
 
 
 
-
+logger = get_logger_loguru(__name__)
 class QuestionAnswerTool(Tool):
     name = "question_answer_tool"
     description = """Use this tool to answer questions by processing retrieved documents and providing a concise answer with source citations.

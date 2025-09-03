@@ -1,14 +1,11 @@
 import asyncio
 import os
-
 import psutil
 from crawl4ai import AsyncWebCrawler, CacheMode
-from django_app_rag.rag.logging_setup import get_logger
-
-logger = get_logger(__name__)
-from django_app_rag.rag.utils import generate_content_hash
+from django_app_rag.logging import get_logger_loguru
 from django_app_rag.rag.models import Document, DocumentMetadata
 
+logger = get_logger_loguru(__name__)
 
 class Crawl4AICrawler:
     """A crawler implementation using crawl4ai library for concurrent web crawling.

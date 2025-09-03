@@ -1,11 +1,10 @@
 from typing import Literal, Union
-from django_app_rag.rag.logging_setup import get_logger
-
-logger = get_logger(__name__)
-
+from django_app_rag.logging import get_logger_loguru
 from django_app_rag.rag.infrastructur.faiss.retriever import FaissParentDocumentRetriever
 from .embeddings import EmbeddingModelType, EmbeddingsModel, get_embedding_model
 from .splitters import get_splitter
+
+logger = get_logger_loguru(__name__)
 
 # Add these type definitions at the top of the file
 RetrieverType = Literal["contextual", "parent"]

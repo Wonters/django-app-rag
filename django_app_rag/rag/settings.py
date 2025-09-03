@@ -1,6 +1,6 @@
-from django_app_rag.rag.logging_setup import get_logger
+from django_app_rag.logging import get_logger_loguru
 
-logger = get_logger(__name__)
+logger = get_logger_loguru(__name__)
 from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from pathlib import Path

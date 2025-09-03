@@ -1,13 +1,10 @@
 from pathlib import Path
-
-from django_app_rag.rag.logging_setup import get_logger
-
-logger = get_logger(__name__)
+from django_app_rag.logging import get_logger_loguru
 from typing_extensions import Annotated
 from zenml.steps import get_step_context, step
-
 from django_app_rag.rag.models import Document
 
+logger = get_logger_loguru(__name__)
 
 @step
 def read_documents_from_disk(

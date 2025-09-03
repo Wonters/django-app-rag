@@ -1,10 +1,10 @@
 from pathlib import Path
 from typing_extensions import Annotated
 from zenml import get_step_context, step
-from django_app_rag.rag.logging_setup import get_thread_safe_logger
+from django_app_rag.logging import get_logger_loguru
 from django_app_rag.rag.models import Document
 
-logger = get_thread_safe_logger(__name__)
+logger = get_logger_loguru(__name__)
 
 @step
 def save_documents_to_disk(

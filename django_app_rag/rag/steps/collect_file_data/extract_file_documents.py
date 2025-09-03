@@ -2,9 +2,9 @@ import os
 from pathlib import Path
 from typing_extensions import Annotated
 from zenml import get_step_context, step
-from django_app_rag.rag.logging_setup import get_logger
+from django_app_rag.logging import get_logger_loguru
 
-logger = get_logger(__name__)
+logger = get_logger_loguru(__name__)
 
 # Désactiver NNPACK et optimisations CPU problématiques
 os.environ["USE_NNPACK"] = "0"

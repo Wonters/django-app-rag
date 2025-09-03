@@ -4,10 +4,10 @@ import json
 from pathlib import Path
 from typing import Optional, Iterator, List
 from uuid import uuid4
-from django_app_rag.rag.logging_setup import get_logger
+from django_app_rag.logging import get_logger_loguru
 from django_app_rag.rag.models import Document
 
-logger = get_logger(__name__)
+logger = get_logger_loguru(__name__)
 
 
 class DiskStorage:

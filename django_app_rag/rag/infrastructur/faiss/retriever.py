@@ -1,8 +1,6 @@
 import os.path
 from pathlib import Path
-from django_app_rag.rag.logging_setup import get_logger
-
-logger = get_logger(__name__)
+from django_app_rag.logging import get_logger_loguru
 import faiss
 from typing import Any, Dict, List, Optional
 from langchain.embeddings.base import Embeddings
@@ -15,6 +13,7 @@ from langchain_community.vectorstores import FAISS
 from langchain_core.callbacks import CallbackManagerForRetrieverRun
 from langchain.retrievers.multi_vector import SearchType
 
+logger = get_logger_loguru(__name__)
 
 class FaissParentDocumentRetriever(ParentDocumentRetriever):
     """Un ParentDocumentRetriever qui utilise FAISS en back-end."""

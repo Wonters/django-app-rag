@@ -1,18 +1,16 @@
 import dramatiq 
 import json
-import os
 import time
 import traceback
 from pathlib import Path
 from typing import Optional, List, Dict, Any
 from pydantic import BaseModel, Field, validator
 from enum import Enum
-
 from django_app_rag.models import Source, Answer, Document
-from django_app_rag.logging import get_logger
+from django_app_rag.logging import get_logger_loguru
 from django_app_rag.rag.agents.tools import QuestionAnswerTool, DiskStorageRetrieverTool
 
-logger = get_logger(__name__)
+logger = get_logger_loguru(__name__)
 
 
 class TaskStatus(str, Enum):

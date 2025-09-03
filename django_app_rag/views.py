@@ -9,12 +9,12 @@ from .serializer import SourceSerializer, QuestionSerializer, CollectionSerializ
 from django.views.generic.edit import FormView, CreateView
 from .models import Source
 from .forms import SourceForm, QuestionForm, CollectionForm
-from django_app_rag.logging import get_logger
+import logging 
 from .tasks.mixins import TaskViewMixin
 from .tasks.etl_tasks import indexing_collection_task, indexing_source_task
 from pathlib import Path
 
-logger = get_logger(__name__)
+logger = logging.getLogger(__name__)
 
 class MainRAGTemplateView(TemplateView):
     """

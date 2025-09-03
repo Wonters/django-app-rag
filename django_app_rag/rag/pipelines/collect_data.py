@@ -1,8 +1,6 @@
 from pathlib import Path
 from typing import Optional
-
 from zenml import pipeline
-
 from ..steps.collect_file_data import extract_file_documents
 from ..steps.collect_url_data import extract_url_documents
 from ..steps.collect_notion_data import (
@@ -10,9 +8,9 @@ from ..steps.collect_notion_data import (
     extract_notion_documents_metadata,
 )
 from ..steps.infrastructure import save_documents_to_disk, upload_to_s3
-from django_app_rag.rag.logging_setup import get_logger
+from django_app_rag.logging import get_logger_loguru
 
-logger = get_logger(__name__)
+logger = get_logger_loguru(__name__)
 
 @pipeline(enable_cache=False)
 def collect_data(

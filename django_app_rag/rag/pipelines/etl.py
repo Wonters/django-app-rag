@@ -1,16 +1,14 @@
 from pathlib import Path
-
-from django_app_rag.rag.logging_setup import get_logger
-
-logger = get_logger(__name__)
+from django_app_rag.logging import get_logger_loguru
 from zenml import pipeline
-
 from ..steps.etl import add_quality_score, crawl
 from ..steps.infrastructure import (
     read_documents_from_disk,
     combine_documents,
 )
 from ..steps.infrastructure.save_to_diskstorage import save_to_diskstorage
+
+logger = get_logger_loguru(__name__)
 
 @pipeline(enable_cache=False)
 def etl_mixed(

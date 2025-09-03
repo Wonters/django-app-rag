@@ -1,14 +1,13 @@
 from zenml import pipeline
-from django_app_rag.rag.logging_setup import get_logger
+from django_app_rag.logging import get_logger_loguru
 from typing import Union
-
-logger = get_logger(__name__)
 from ..embeddings import EmbeddingModelType
 from ..retrievers import RetrieverType
 from ..splitters import SummarizationType
 from ..steps.compute_rag_vector_index import chunk_embed_load, filter_by_quality
 from ..steps.infrastructure import read_documents_from_diskstorage
 
+logger = get_logger_loguru(__name__)
 
 @pipeline
 def compute_rag_vector_index(

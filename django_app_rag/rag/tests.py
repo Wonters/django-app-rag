@@ -2,15 +2,11 @@ import pytest
 from django_app_rag.rag.infrastructur.disk_storage import DiskStorage
 from django_app_rag.rag.models import Document
 from django_app_rag.rag.retrievers import get_retriever
-from typing import List, Dict, Any, Optional
-from django_app_rag.rag.logging_setup import get_logger
-
-logger = get_logger(__name__)
+from django_app_rag.logging import get_logger_loguru
 from django_app_rag.rag.agents.tools import get_agent
 from pathlib import Path
 import json
 import time
-from concurrent.futures import ThreadPoolExecutor
 from django_app_rag.models import (
     Source,
     Question,
@@ -23,7 +19,7 @@ from django.core.files import File
 from django_app_rag.rag.agents.tools import QuestionAnswerTool, DiskStorageRetrieverTool
 from django_app_rag.rag.models import DocumentMetadata
 
-
+logger = get_logger_loguru(__name__)
 class TestRetriever:
     """Classe pour tester les fonctionnalités du retriever FAISS"""
 

@@ -1,15 +1,11 @@
 import json
 from typing import Any
-
 import requests
-from django_app_rag.rag.logging_setup import get_logger
-
-logger = get_logger(__name__)
-
+from django_app_rag.logging import get_logger_loguru
 from django_app_rag.rag.settings import settings
 from django_app_rag.rag.models import DocumentMetadata
 
-
+logger = get_logger_loguru(__name__)
 class NotionDatabaseClient:
     """Client for interacting with Notion databases.
 

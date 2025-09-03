@@ -1,19 +1,15 @@
 import asyncio
 import json
 import os
-
 import psutil
 from litellm import acompletion
-from django_app_rag.rag.logging_setup import get_logger
-
-logger = get_logger(__name__)
+from django_app_rag.logging import get_logger_loguru
 from pydantic import BaseModel
 from tqdm.asyncio import tqdm
-
 from django_app_rag.rag import utils 
 from django_app_rag.rag.models import Document
 
-
+logger = get_logger_loguru(__name__)
 class QualityScoreResponseFormat(BaseModel):
     """Format for quality score responses from the language model.
 

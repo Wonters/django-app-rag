@@ -1,18 +1,16 @@
 from pathlib import Path
 from typing import Any
-
-from django_app_rag.rag.logging_setup import get_logger
-
-logger = get_logger(__name__)
+from django_app_rag.logging import get_logger_loguru
 from smolagents import LiteLLMModel, MessageRole, MultiStepAgent, ToolCallingAgent
-
 from django_app_rag.rag.settings import settings
-
 from .summarizer import HuggingFaceEndpointSummarizerTool, OpenAISummarizerTool
 from .what_can_i_do import what_can_i_do
 from django_app_rag.rag.monitoring.mlflow import mlflow_track
 from .diskstorage_retriever import DiskStorageRetrieverTool
 from .question_answer import QuestionAnswerTool
+
+
+logger = get_logger_loguru(__name__)
 
 def get_agent(retriever_config_path: Path) -> "AgentWrapper":
     agent = AgentWrapper.build_from_smolagents(

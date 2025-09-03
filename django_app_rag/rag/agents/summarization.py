@@ -1,15 +1,12 @@
 import asyncio
 import os
-
 import psutil
 from litellm import acompletion
-from django_app_rag.rag.logging_setup import get_logger
-
-logger = get_logger(__name__)
+from django_app_rag.logging import get_logger_loguru
 from tqdm.asyncio import tqdm
-
 from django_app_rag.rag.models import Document
 
+logger = get_logger_loguru(__name__)
 
 class SummarizationAgent:
     """Generates summaries for documents using LiteLLM with async support.

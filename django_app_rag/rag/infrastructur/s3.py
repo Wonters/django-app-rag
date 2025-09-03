@@ -3,17 +3,14 @@ import tempfile
 import zipfile
 from pathlib import Path
 from typing import Union
-
 import boto3
 import botocore
 import botocore.config
-from django_app_rag.rag.logging_setup import get_logger
-
-logger = get_logger(__name__)
-
+from django_app_rag.logging import get_logger_loguru
 from ..settings import settings
 
 
+logger = get_logger_loguru(__name__)
 class S3Client:
     def __init__(
         self,

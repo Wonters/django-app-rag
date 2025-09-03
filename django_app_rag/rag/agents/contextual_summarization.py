@@ -1,18 +1,14 @@
 import asyncio
 import os
-
 import psutil
 from litellm import acompletion
-from django_app_rag.rag.logging_setup import get_logger
-
-logger = get_logger(__name__)
+from django_app_rag.logging import get_logger_loguru
 from openai import AsyncOpenAI
 from pydantic import BaseModel
 from tqdm.asyncio import tqdm
-
 from ..settings import settings
 
-
+logger = get_logger_loguru(__name__)
 class ContextualDocument(BaseModel):
     """A document with its chunk and contextual summarization.
 

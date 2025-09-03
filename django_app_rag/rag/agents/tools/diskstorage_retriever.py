@@ -1,9 +1,7 @@
 import json
 from pathlib import Path
 import yaml
-from django_app_rag.rag.logging_setup import get_logger
-
-logger = get_logger(__name__)
+from django_app_rag.logging import get_logger_loguru
 from smolagents import Tool
 from django_app_rag.rag.monitoring.mlflow import mlflow_track
 from django_app_rag.rag.retrievers import get_retriever
@@ -11,6 +9,7 @@ import mlflow
 import numpy as np
 
 
+logger = get_logger_loguru(__name__)
 class DiskStorageRetrieverTool(Tool):
     name = "diskstorage_vector_search_retriever"
     description = """Use this tool to search and retrieve relevant documents from a knowledge base using semantic search.
