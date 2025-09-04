@@ -9,6 +9,7 @@ from django_app_rag.rag.models import Document
 
 logger = get_logger_loguru(__name__)
 
+
 @step
 def add_quality_score(
     documents: list,

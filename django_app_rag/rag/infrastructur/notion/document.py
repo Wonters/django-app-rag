@@ -47,7 +47,12 @@ class NotionDocumentClient:
                 properties=parent_metadata["properties"],
             )
 
+        # Générer un ID basé sur l'ID de la page Notion pour garantir la cohérence
+        from django_app_rag.rag.utils import generate_consistent_id
+        notion_based_id = generate_consistent_id("notion", document_metadata.id)
+        
         return Document(
+            id=notion_based_id,
             metadata=document_metadata,
             parent_metadata=parent_metadata,
             content=content,

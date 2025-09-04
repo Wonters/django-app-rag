@@ -84,3 +84,36 @@ def generate_content_hash(content: str, length: int = 32) -> str:
         base64_hash = base64_hash[:length]
     
     return base64_hash
+
+
+def generate_consistent_id(source_type: str, identifier: str, length: int = 32) -> str:
+    """Generate a consistent ID based on the source type and identifier.
+    
+    This ensures that the same source (URL, file path, or Notion page) always
+    generates the same ID, regardless of content variations.
+    
+    Args:
+        source_type: Type of source ("url", "file", "notion").
+        identifier: The unique identifier for the source:
+                   - For URLs: the URL string
+                   - For files: the file path
+                   - For Notion: the page ID
+        length: The desired length of the final hash (truncated from base64).
+        
+    Returns:
+        str: A consistent base64 hash based on source type and identifier.
+    """
+    # Create a consistent identifier by combining source type and identifier
+    consistent_identifier = f"{source_type}:{identifier}"
+    
+    # Generate SHA-256 hash of the consistent identifier
+    id_hash = hashlib.sha256(consistent_identifier.encode('utf-8')).digest()
+    
+    # Convert to base64 and remove padding characters
+    base64_hash = base64.urlsafe_b64encode(id_hash).decode('utf-8').rstrip('=')
+    
+    # Truncate to desired length if needed
+    if length and len(base64_hash) > length:
+        base64_hash = base64_hash[:length]
+    
+    return base64_hash

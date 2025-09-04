@@ -32,6 +32,7 @@
               <th>{{ $t('Questions', 2) }}</th>
               <th>{{ $t('Answers', 2) }}</th>
               <th>{{ $t('Indexé', 2) }}</th>
+              <th>{{ $t('Qualité', 2) }}</th>
               <th>{{ $t('Analyse', 2) }}</th>
               <th>{{ $t('Actions', 2) }}</th>
             </tr>
@@ -59,6 +60,23 @@
                   </span>
                   <span v-else class="badge bg-secondary">
                     <i class="bi bi-x-circle"></i> {{ $t('Non', 2) }}
+                  </span>
+                </div>
+              </td>
+              <td>
+                <!-- Colonne Qualité -->
+                <div class="text-center">
+                  <span v-if="source.quality_score !== null && source.quality_score !== undefined" 
+                        class="badge" 
+                        :class="{
+                          'bg-success': source.quality_score >= 0.8,
+                          'bg-warning': source.quality_score >= 0.6 && source.quality_score < 0.8,
+                          'bg-danger': source.quality_score < 0.6
+                        }">
+                    {{ Math.round(source.quality_score * 100) }}%
+                  </span>
+                  <span v-else class="badge bg-secondary">
+                    <i class="bi bi-dash-circle"></i> {{ $t('N/A', 2) }}
                   </span>
                 </div>
               </td>
@@ -173,7 +191,7 @@ const { tableRef, initDataTable, destroyDataTable, refreshDataTable } = useDataT
   lengthMenu: [[5, 10, 25, 50], [5, 10, 25, 50]],
   order: [[0, 'asc']],
   columnDefs: [
-    { targets: [5, 6, 7], orderable: false }, // Colonnes Indexé, Analyse, Actions non triables
+    { targets: [5, 6, 7, 8], orderable: false }, // Colonnes Indexé, Qualité, Analyse, Actions non triables
     { targets: [3, 4], type: 'num' }, // Colonnes Questions et Answers de type numérique
   ],
   //language: {

@@ -12,7 +12,7 @@ from django_app_rag.logging import get_logger_loguru
 
 logger = get_logger_loguru(__name__)
 
-@pipeline(enable_cache=False)
+@pipeline(enable_cache=True)
 def collect_data(
     data_dir: Path,
     file_paths: Optional[list[Path]] = None,
@@ -37,6 +37,15 @@ def collect_data(
         max_workers: Nombre maximum de workers pour le traitement des URLs
     """
     invocation_ids = []
+    logger.info("--------------------------------")
+    logger.info(f"Storage mode: {storage_mode}")
+    logger.info(f"Data dir: {data_dir}")
+    logger.info(f"File paths: {file_paths}")
+    logger.info(f"Urls: {urls}")
+    logger.info(f"Notion database ids: {notion_database_ids}")
+    logger.info(f"To s3: {to_s3}")
+    logger.info(f"Max workers: {max_workers}")
+    logger.info("--------------------------------")
     if storage_mode == "append":
         data_dir = data_dir / "tmp"
     # Collecte des données depuis les fichiers
@@ -53,6 +62,7 @@ def collect_data(
             storage_mode=storage_mode,
         )
         invocation_ids.append(result.invocation_id)
+        logger.info(f"[FILES] Saved documents to {file_data_dir}")
     
     # Collecte des données depuis les URLs
     if urls:
@@ -68,6 +78,7 @@ def collect_data(
             storage_mode=storage_mode,
         )
         invocation_ids.append(result.invocation_id)
+        logger.info(f"[URLS] Saved documents to {url_data_dir}")
     
     # Collecte des données depuis Notion
     if notion_database_ids:
@@ -85,7 +96,7 @@ def collect_data(
                 storage_mode=storage_mode,
             )
             invocation_ids.append(result.invocation_id)
-    
+            logger.info(f"[NOTION] Saved documents to {notion_data_dir / f'database_{index}'}")
     # Upload vers S3 si demandé
     if to_s3 and invocation_ids:
         # Upload des fichiers

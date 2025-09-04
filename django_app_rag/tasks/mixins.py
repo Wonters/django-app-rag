@@ -2,9 +2,9 @@ from rest_framework.response import Response
 from django_dramatiq.models import Task
 from rest_framework import status
 from .handler import TaskResultManager
-from ..logging import get_logger
+from ..logging import get_logger_loguru
 
-logger = get_logger(__name__)
+logger = get_logger_loguru(__name__)
 
 class TaskViewMixin:
     """

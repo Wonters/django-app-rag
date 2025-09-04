@@ -190,9 +190,12 @@ def extract_file_documents(
                 docling_used = False
                 processing_method = "fallback_text_reading"
             
-            # L'ID sera généré automatiquement par le constructeur de Document basé sur le contenu
+            # Générer un ID basé sur le chemin du fichier pour garantir la cohérence
+            from django_app_rag.rag.utils import generate_consistent_id
+            file_based_id = generate_consistent_id("file", str(Path(file_path).name))
+            
             document_metadata = DocumentMetadata(
-                id="",  # ID temporaire, sera remplacé par le constructeur
+                id=file_based_id,
                 url=str(file_path),
                 title=file_path.name,
                 source_type="file",
@@ -207,8 +210,9 @@ def extract_file_documents(
                 }
             )
             
-            # Créer le document
+            # Créer le document avec l'ID basé sur le chemin du fichier
             document = Document(
+                id=file_based_id,
                 metadata=document_metadata,
                 parent_metadata=None,
                 content=content,
@@ -227,9 +231,12 @@ def extract_file_documents(
                 logger.info(f"Attempting fallback text reading for {file_path}")
                 content = _safe_text_fallback(file_path)
                 
-                # L'ID sera généré automatiquement par le constructeur de Document basé sur le contenu
+                # Générer un ID basé sur le chemin du fichier pour garantir la cohérence
+                from django_app_rag.rag.utils import generate_consistent_id
+                file_based_id = generate_consistent_id("file", str(file_path))
+                
                 document_metadata = DocumentMetadata(
-                    id="",  # ID temporaire, sera remplacé par le constructeur
+                    id=file_based_id,
                     url=str(file_path),
                     title=file_path.name,
                     source_type="file",
@@ -245,6 +252,7 @@ def extract_file_documents(
                 )
                 
                 document = Document(
+                    id=file_based_id,
                     metadata=document_metadata,
                     parent_metadata=None,
                     content=content,

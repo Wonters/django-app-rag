@@ -126,10 +126,14 @@ class Crawl4AICrawler:
             else:
                 title = ""
 
-            # L'ID sera généré automatiquement par le constructeur de Document basé sur le contenu
+            # Générer un ID basé sur l'URL pour garantir la cohérence
+            from django_app_rag.rag.utils import generate_consistent_id
+            url_based_id = generate_consistent_id("url", url)
+            
             return Document(
+                id=url_based_id,  # ID basé sur l'URL pour garantir la cohérence
                 metadata=DocumentMetadata(
-                    id="",  # ID temporaire, sera remplacé par le constructeur
+                    id=url_based_id,
                     url=url,
                     title=title,
                     source_type="url",

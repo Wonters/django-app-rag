@@ -1,7 +1,5 @@
 import json
 import uuid
-from pathlib import Path
-from typing import Any
 from django_app_rag.logging import get_logger_loguru
 from smolagents import Tool
 from django_app_rag.rag.monitoring.mlflow import mlflow_track

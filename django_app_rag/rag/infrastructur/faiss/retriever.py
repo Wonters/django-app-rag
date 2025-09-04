@@ -6,7 +6,7 @@ from typing import Any, Dict, List, Optional
 from langchain.embeddings.base import Embeddings
 from langchain.schema import Document
 from langchain_core.stores import InMemoryStore
-from langchain.docstore.in_memory import InMemoryDocstore
+from langchain_community.docstore.in_memory import InMemoryDocstore
 from langchain.retrievers.parent_document_retriever import ParentDocumentRetriever
 from langchain_text_splitters import TextSplitter
 from langchain_community.vectorstores import FAISS

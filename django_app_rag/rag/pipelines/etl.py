@@ -5,12 +5,13 @@ from ..steps.etl import add_quality_score, crawl
 from ..steps.infrastructure import (
     read_documents_from_disk,
     combine_documents,
+    move_tmp_files,
 )
 from ..steps.infrastructure.save_to_diskstorage import save_to_diskstorage
 
 logger = get_logger_loguru(__name__)
 
-@pipeline(enable_cache=False)
+@pipeline(enable_cache=True)
 def etl_mixed(
     data_dir: Path,
     collection_name: str,
@@ -37,7 +38,18 @@ def etl_mixed(
         include_urls: Si True, les documents d'URLs sont inclus
         storage_mode: Mode de stockage - "overwrite" (écrase tout) ou "append" (ajoute)
     """
-    
+    logger.info("--------------------------------")
+    logger.info(f"Storage mode: {storage_mode}")
+    logger.info(f"Data dir: {data_dir}")
+    logger.info(f"Collection name: {collection_name}")
+    logger.info(f"To s3: {to_s3}")
+    logger.info(f"Max workers: {max_workers}")
+    logger.info(f"Quality agent model id: {quality_agent_model_id}")
+    logger.info(f"Quality agent mock: {quality_agent_mock}")
+    logger.info(f"Include notion: {include_notion}")
+    logger.info(f"Include files: {include_files}")
+    logger.info(f"Include urls: {include_urls}")
+    logger.info("--------------------------------")
     notion_documents = None
     files_documents = None
     urls_documents = None
@@ -103,29 +115,5 @@ def etl_mixed(
         collection_name=collection_name, 
         data_dir=root_data_dir.as_posix(),
         mode=storage_mode
-    ) 
-
-    if storage_mode == "append":
-        for directory in data_dir.iterdir():
-            target_dir = root_data_dir / directory.name
-            if target_dir.exists():
-                # Si le dossier existe déjà, fusionner le contenu
-                for item in directory.iterdir():
-                    if item.is_file():
-                        # Pour les fichiers, les déplacer directement
-                        item.rename(target_dir / item.name)
-                    elif item.is_dir():
-                        # Pour les dossiers, fusionner récursivement
-                        target_subdir = target_dir / item.name
-                        if target_subdir.exists():
-                            # Si le sous-dossier existe, fusionner son contenu
-                            for subitem in item.iterdir():
-                                subitem.rename(target_subdir / subitem.name)
-                            item.rmdir()  # Supprimer le dossier vide
-                        else:
-                            # Si le sous-dossier n'existe pas, le déplacer
-                            item.rename(target_subdir)
-                directory.rmdir()  # Supprimer le dossier vide
-            else:
-                # Si le dossier n'existe pas, le déplacer normalement
-                directory.rename(target_dir)
+    )
+    move_tmp_files(data_dir=root_data_dir, storage_mode=storage_mode)

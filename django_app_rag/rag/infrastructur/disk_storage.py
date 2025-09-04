@@ -89,7 +89,7 @@ class DiskStorage:
             added_count = 0
             
             for doc in data:
-                doc_id = doc.get('uid', str(uuid4()))
+                doc_id = doc.get('id', str(uuid4()))
                 if doc_id not in self.db:
                     self.db[doc_id] = doc
                     added_count += 1
@@ -99,7 +99,7 @@ class DiskStorage:
             # Mode écrasement (par défaut)
             self.db.clear()
             for doc in data:
-                doc_id = doc.get('uid', str(uuid4()))
+                doc_id = doc.get('id', str(uuid4()))
                 self.db[doc_id] = doc
             logger.info(f"Mode {mode}: écrasement complet avec {len(data)} documents")
 

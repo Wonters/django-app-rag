@@ -20,7 +20,7 @@ def save_documents_to_disk(
     # Sauvegarder chaque document
     for doc in documents:
         logger.info(f"Saving document {doc.id} to {output_dir}")
-        doc.write(output_dir=output_dir, obfuscate=True, also_save_as_txt=True)
+        doc.write(output_dir=output_dir, obfuscate=False, also_save_as_txt=True)
 
     step_context = get_step_context()
     step_context.add_output_metadata(

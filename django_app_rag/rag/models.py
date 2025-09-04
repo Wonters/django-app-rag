@@ -108,11 +108,13 @@ class Document(BaseModel):
                 indent=4,
                 ensure_ascii=False,
             )
+            logger.info(f"Wrote metadata fordocument {self.id} to {output_file}")
 
         if also_save_as_txt:
             txt_path = output_file.with_suffix(".txt")
             with open(txt_path, "w", encoding="utf-8") as f:
                 f.write(self.content)
+                logger.info(f"Wrote content for document {self.id} to {txt_path}")
 
     def obfuscate(self) -> "Document":
         """Create an obfuscated version of this document by modifying in place.

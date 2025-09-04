@@ -9,7 +9,7 @@ from ..steps.infrastructure import read_documents_from_diskstorage
 
 logger = get_logger_loguru(__name__)
 
-@pipeline
+@pipeline(enable_cache=True)
 def compute_rag_vector_index(
     collection_name: str,
     fetch_limit: int,
@@ -57,6 +57,27 @@ def compute_rag_vector_index(
     Returns:
         None
     """
+    logger.info("--------------------------------")
+    logger.info(f"Collection name: {collection_name}")
+    logger.info(f"Fetch limit: {fetch_limit}")
+    logger.info(f"Content quality score threshold: {content_quality_score_threshold}")
+    logger.info(f"Retriever type: {retriever_type}")
+    logger.info(f"Embedding model id: {embedding_model_id}")
+    logger.info(f"Embedding model type: {embedding_model_type}")
+    logger.info(f"Embedding model dim: {embedding_model_dim}")
+    logger.info(f"Chunk size: {chunk_size}")
+    logger.info(f"Vectorstore: {vectorstore}")
+    logger.info(f"Contextual summarization type: {contextual_summarization_type}")
+    logger.info(f"Contextual agent model id: {contextual_agent_model_id}")
+    logger.info(f"Contextual agent max characters: {contextual_agent_max_characters}")
+    logger.info(f"Mock: {mock}")
+    logger.info(f"Processing batch size: {processing_batch_size}")
+    logger.info(f"Processing max workers: {processing_max_workers}")
+    logger.info(f"Device: {device}")
+    logger.info(f"Data dir: {data_dir}")
+    logger.info(f"Mode: {mode}")
+    logger.info(f"Id documents: {id_documents}")
+    logger.info("--------------------------------")
     documents = read_documents_from_diskstorage(
         collection_name=collection_name, limit=fetch_limit, data_dir=data_dir, mode=mode, id_documents=id_documents
     )

@@ -1,13 +1,13 @@
 from django.db import models
 from django.core.files.base import ContentFile
 from pathlib import Path
-import os
 import yaml
+import numpy as np
 from pathlib import Path
 from django_app_rag.logging import get_logger
 from django_app_rag.app_settings import app_rag_config
-
-
+from django_app_rag.rag.infrastructur.disk_storage import DiskStorage
+from django_app_rag.rag.utils import generate_consistent_id
 logger = get_logger(__name__)
 
 
@@ -54,6 +54,7 @@ class Source(models.Model):
         "Collection", on_delete=models.CASCADE, related_name="sources"
     )
     is_indexed_at = models.DateTimeField(blank=True, null=True)
+    quality_score = models.FloatField(blank=True, null=True)
 
     def __str__(self):
         if self.type == Source.NOTION:
@@ -69,7 +70,34 @@ class Source(models.Model):
         if self.type == Source.FILE:
             self.file.delete(save=False)
         super().delete(*args, **kwargs)
+    
+    def get_rag_id(self):
+        if self.type == Source.NOTION:
+            identifier = self.notion_db_ids
+        elif self.type == Source.URL:
+            identifier = self.link
+        elif self.type == Source.FILE:
+            identifier = Path(self.file.name).name
+        return generate_consistent_id(self.type, identifier)
 
+    def compute_quality_score(self, reset: bool = False):
+        if self.quality_score is None or reset:
+            disk_storage = DiskStorage(
+                collection_name=self.collection.get_rag_config_collection_name(),
+                data_dir=self.collection.get_rag_data_dir().as_posix(),
+            )
+            documents = disk_storage.read_raw()
+            quality_score: np.ndarray = np.array([])
+            for document in documents:
+                if document["metadata"]["id"] == self.get_rag_id():
+                    quality_score = np.append(quality_score, float(document["content_quality_score"]))
+            
+            # Éviter NaN si aucun score n'est trouvé
+            if len(quality_score) > 0:
+                self.quality_score = quality_score.mean()
+            else:
+                self.quality_score = 0.0  # ou 0.0 selon votre logique métier
+            self.save()
 
 
 class Question(models.Model):

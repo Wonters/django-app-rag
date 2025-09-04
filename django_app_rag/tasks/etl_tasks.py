@@ -3,15 +3,20 @@ from pathlib import Path
 from django.conf import settings
 from django_app_rag.logging import get_logger
 from django_app_rag.logging import get_logger_loguru
+from django_app_rag.logging import get_subprocess_logger
 import subprocess as sp
 import sys
 from django_app_rag.models import Collection, Source
 from django.utils import timezone
 import traceback
 
+
 logger = get_logger_loguru(__name__)
 
 SCRIPT_PATH = Path(__file__).parent.parent / "rag" / "run.py"
+
+
+
 
 
 def run_rag_process(script_path: Path, name: str, config_path: Path):
@@ -27,6 +32,14 @@ def run_rag_process(script_path: Path, name: str, config_path: Path):
         bool: True si le processus s'est terminé avec succès, False sinon
     """
     try:
+        logger.info(f"Démarrage du processus RAG '{name}'")
+        logger.info(f"Script: {script_path}")
+        logger.info(f"Config: {config_path}")
+        
+        # Créer un logger spécifique pour ce sous-processus
+        subprocess_logger, subprocess_log_file = get_subprocess_logger(name)
+        logger.info(f"Fichier de log du sous-processus '{name}': {subprocess_log_file}")
+        
         with sp.Popen(
             [sys.executable, str(script_path), name, "--config", config_path],
             stderr=sp.PIPE,
@@ -34,10 +47,16 @@ def run_rag_process(script_path: Path, name: str, config_path: Path):
             text=True,
             bufsize=1,
         ) as process:
+            logger.info(f"Processus '{name}' lancé (PID: {process.pid})")
+            
+            # Logs du sous-processus avec son propre logger et fichier (nettoyage ANSI automatique)
             for line in process.stdout:
-                logger.info(line.rstrip())
+                if line.strip():  # Ignorer les lignes vides
+                    subprocess_logger.info(line.rstrip())
+            
             for line in process.stderr:
-                logger.error(line.rstrip())
+                if line.strip():  # Ignorer les lignes vides
+                    subprocess_logger.error(line.rstrip())
             
             # Attendre la fin du processus et récupérer le code de retour
             return_code = process.wait()
@@ -69,13 +88,17 @@ def launch_rag_indexing_process(
     """
     results = {}
     
+    logger.info("=" * 60)
+    logger.info("Début du processus ETL complet")
+    logger.info("=" * 60)
+    
     # Étape 1: Retrieve
-    logger.info("Début de l'étape Retrieve")
+    logger.info("=== ÉTAPE 1/3: RETRIEVE ===")
     retrieve_success = run_rag_process(script_path, "retrieve", config_path)
     results["retrieve"] = "success" if retrieve_success else "fail"
     
     if not retrieve_success:
-        logger.error("Étape Retrieve a échoué")
+        logger.error("Étape Retrieve a échoué - Arrêt du processus ETL")
         return {
             "status": "fail",
             "message": "Le processus ETL a échoué lors de l'étape Retrieve",
@@ -83,12 +106,12 @@ def launch_rag_indexing_process(
         }
     
     # Étape 2: ETL
-    logger.info("Début de l'étape ETL")
+    logger.info("=== ÉTAPE 2/3: ETL ===")
     etl_success = run_rag_process(script_path, "etl", config_path)
     results["etl"] = "success" if etl_success else "fail"
     
     if not etl_success:
-        logger.error("Étape ETL a échoué")
+        logger.error("Étape ETL a échoué - Arrêt du processus ETL")
         return {
             "status": "fail",
             "message": "Le processus ETL a échoué lors de l'étape ETL",
@@ -96,12 +119,12 @@ def launch_rag_indexing_process(
         }
     
     # Étape 3: Index
-    logger.info("Début de l'étape Index")
+    logger.info("=== ÉTAPE 3/3: INDEX ===")
     index_success = run_rag_process(script_path, "index", config_path)
     results["index"] = "success" if index_success else "fail"
     
     if not index_success:
-        logger.error("Étape Index a échoué")
+        logger.error("Étape Index a échoué - Arrêt du processus ETL")
         return {
             "status": "fail",
             "message": "Le processus ETL a échoué lors de l'étape Index",
@@ -109,7 +132,9 @@ def launch_rag_indexing_process(
         }
     
     # Toutes les étapes ont réussi
-    logger.info("Processus ETL terminé avec succès")
+    logger.info("=" * 60)
+    logger.info("Processus ETL terminé avec succès - Toutes les étapes complétées")
+    logger.info("=" * 60)
     return {
         "status": "success",
         "message": "Le processus ETL s'est terminé avec succès",
@@ -154,6 +179,8 @@ def indexing_collection_task(collection_id: int, storage_mode: str = "overwrite"
             }
         
         collection.sources.update(is_indexed_at=timezone.now())
+        for source in collection.sources.all():
+            source.compute_quality_score()
         return {
             "status": "success",
             "message": f"Collection {collection_id} initialisée en mode {storage_mode} avec succès",
@@ -208,6 +235,8 @@ def indexing_source_task(source_id: int, storage_mode: str = "append"):
         # Mettre à jour le timestamp d'indexation
         source.is_indexed_at = timezone.now()
         source.save()
+        source.compute_quality_score()
+        
 
         return {
             "status": "success",

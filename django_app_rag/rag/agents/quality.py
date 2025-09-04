@@ -152,6 +152,14 @@ DOCUMENT:
             [doc for doc in scored_documents if hasattr(doc, "quality_score")]
         )
         failed_count = total_docs - success_count
+        
+        # Log detailed failure information
+        if failed_count > 0:
+            failed_docs = [doc for doc in scored_documents if not hasattr(doc, "quality_score")]
+            logger.warning(f"Failed documents details: {len(failed_docs)} documents failed")
+            for i, doc in enumerate(failed_docs[:5]):  # Show first 5 failed docs
+                logger.warning(f"Failed doc {i+1}: ID={doc.id}, has_quality_score={hasattr(doc, 'quality_score')}")
+        
         logger.info(
             f"Quality scoring completed: "
             f"{success_count}/{total_docs} succeeded ✓ | "
@@ -163,6 +171,9 @@ DOCUMENT:
     async def __process_batch(
         self, documents: list[Document], await_time_seconds: int
     ) -> list[Document]:
+        logger.info(f"Starting batch processing of {len(documents)} documents with {self.max_concurrent_requests} concurrent requests")
+        logger.info(f"Await time between requests: {await_time_seconds} seconds")
+        
         semaphore = asyncio.Semaphore(self.max_concurrent_requests)
         tasks = [
             self.__get_quality_score(
@@ -170,16 +181,34 @@ DOCUMENT:
             )
             for document in documents
         ]
+        
+        logger.debug(f"Created {len(tasks)} tasks for processing")
+        
         results = []
+        completed_count = 0
+        failed_count = 0
+        
         for coro in tqdm(
             asyncio.as_completed(tasks),
             total=len(documents),
             desc="Processing documents",
             unit="doc",
         ):
-            result = await coro
-            results.append(result)
+            try:
+                result = await coro
+                results.append(result)
+                completed_count += 1
+                
+                # Log progress every 50 documents
+                if completed_count % 50 == 0:
+                    logger.info(f"Processed {completed_count}/{len(documents)} documents")
+                    
+            except Exception as e:
+                logger.error(f"Error processing document in batch: {str(e)}")
+                failed_count += 1
+                results.append(None)
 
+        logger.info(f"Batch processing completed: {completed_count} succeeded, {failed_count} failed")
         return results
 
     async def __get_quality_score(
@@ -197,10 +226,14 @@ DOCUMENT:
         Returns:
             Document | None: Document with generated summary or None if failed.
         """
+        print(f"[ENTRY] __get_quality_score called for document {document.id}")  # Force print
         if self.mock:
+            logger.debug(f"Mock mode: returning quality score 0.5 for document {document.id}")
             return document.add_quality_score(score=0.5)
 
         async def process_document() -> Document:
+            logger.debug(f"Processing document {document.id} for quality scoring")
+            print(f"[DEBUG] Processing document {document.id} for quality scoring")  # Force print
             input_user_prompt = self.SYSTEM_PROMPT_TEMPLATE.format(
                 document=document.content
             )
@@ -214,6 +247,8 @@ DOCUMENT:
                 )
 
             try:
+                logger.debug(f"Calling API for document {document.id} with model {self.model_id}")
+                print(f"[DEBUG] Calling API for document {document.id} with model {self.model_id}")  # Force print
                 # Add timeout to prevent hanging
                 response = await asyncio.wait_for(
                     acompletion(
@@ -226,29 +261,37 @@ DOCUMENT:
                     timeout=30.0  # 30 second timeout
                 )
                 await asyncio.sleep(await_time_seconds)  # Rate limiting
+                
+                logger.debug(f"API response received for document {document.id}")
+                print(f"[DEBUG] API response received for document {document.id}")  # Force print
 
                 if not response.choices:
                     logger.warning(
-                        f"No quality score generated for document {document.id}"
+                        f"No quality score generated for document {document.id} - no choices in response"
                     )
                     return document
 
                 raw_answer = response.choices[0].message.content
+                logger.debug(f"Received response for document {document.id}: {raw_answer[:100]}...")
                 quality_score = self._parse_model_output(raw_answer)
                 if not quality_score:
                     logger.warning(
-                        f"Failed to parse model output for document {document.id}"
+                        f"Failed to parse model output for document {document.id}. Raw answer: {raw_answer[:200]}"
                     )
                     return document
 
-                return document.add_quality_score(
+                result_doc = document.add_quality_score(
                     score=quality_score.score,
                 )
+                logger.debug(f"Successfully added quality score {quality_score.score} to document {document.id}")
+                return result_doc
             except asyncio.TimeoutError:
                 logger.warning(f"Timeout while scoring document {document.id}")
+                print(f"[WARNING] Timeout while scoring document {document.id}")  # Force print
                 return document
             except Exception as e:
                 logger.warning(f"Failed to score document {document.id}: {str(e)}")
+                print(f"[WARNING] Failed to score document {document.id}: {str(e)}")  # Force print
                 return document
 
         if semaphore:

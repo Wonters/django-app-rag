@@ -1,15 +1,11 @@
-import dramatiq
-from dramatiq.results.backends import RedisBackend
 from django.conf import settings
 from django.utils.module_loading import import_string
-import redis
-import json
 from typing import Optional, Dict, Any
 from django_dramatiq.models import Task
-import logging
+from django_app_rag.logging import get_logger_loguru
 from dramatiq import Message
 
-logger = logging.getLogger(__name__)
+logger = get_logger_loguru(__name__)
 
 
 class TaskResultManager:

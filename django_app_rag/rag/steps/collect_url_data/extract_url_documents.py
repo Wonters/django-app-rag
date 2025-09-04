@@ -29,7 +29,8 @@ def extract_url_documents(
     temp_documents = []
     for url in urls:
         # Créer un ID temporaire basé sur l'URL pour les documents temporaires
-        temp_id = generate_content_hash(url)
+        from django_app_rag.rag.utils import generate_consistent_id
+        temp_id = generate_consistent_id("url", url)
         document_metadata = DocumentMetadata(
             id=temp_id,  # ID temporaire pour les documents de référence
             url=url,
@@ -58,10 +59,10 @@ def extract_url_documents(
         return []
     
     # Retourner directement les objets Document
-    # Note: Les documents retournés par le crawler ont des IDs basés sur le contenu récupéré
+    # Note: Les documents retournés par le crawler ont des IDs basés sur l'URL pour garantir la cohérence
     for document in crawled_documents:
         documents.append(document)
-        logger.info(f"Successfully extracted document from {document.metadata.url} with content-based ID: {document.id}")
+        logger.info(f"Successfully extracted document from {document.metadata.url} with URL-based ID: {document.id}")
 
     step_context = get_step_context()
     step_context.add_output_metadata(
