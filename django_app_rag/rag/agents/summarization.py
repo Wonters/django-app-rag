@@ -5,10 +5,11 @@ from litellm import acompletion
 from django_app_rag.logging import get_logger_loguru
 from tqdm.asyncio import tqdm
 from django_app_rag.rag.models import Document
+from ..mixins.task_mixin_async import TaskMixinAsync
 
 logger = get_logger_loguru(__name__)
 
-class SummarizationAgent:
+class SummarizationAgent(TaskMixinAsync[Document]):
     """Generates summaries for documents using LiteLLM with async support.
 
     This class handles the interaction with language models through LiteLLM to
@@ -46,6 +47,7 @@ Return the document in markdown format regardless of the original format.
         mock: bool = False,
         max_concurrent_requests: int = 10,
     ) -> None:
+        super().__init__()
         self.max_characters = max_characters
         self.model_id = model_id
         self.mock = mock
@@ -88,41 +90,34 @@ Return the document in markdown format regardless of the original format.
         Returns:
             list[Document]: Documents with generated summaries.
         """
-        process = psutil.Process(os.getpid())
-        start_mem = process.memory_info().rss
+        start_mem = self.get_memory_usage()
         total_docs = len(documents)
         logger.debug(
             f"Starting summarization batch with {self.max_concurrent_requests} concurrent requests. "
-            f"Current process memory usage: {start_mem // (1024 * 1024)} MB"
+            f"Current process memory usage: {start_mem['rss']} MB"
         )
 
-        summarized_documents = await self.__process_batch(
-            documents, temperature, await_time_seconds=7
+        # Use the mixin's process_with_retry method
+        summarized_documents = await self.process_with_retry(
+            items=documents,
+            process_item_func=lambda doc, semaphore, await_time: self.__summarize(
+                doc, semaphore, temperature, await_time
+            ),
+            success_condition=lambda doc: doc.summary is not None,
+            initial_await_time=7,
+            retry_await_time=20,
+            batch_name="Summarization"
         )
-        documents_with_summaries = [
-            doc for doc in summarized_documents if doc.summary is not None
-        ]
-        documents_without_summaries = [doc for doc in documents if doc.summary is None]
 
-        # Retry failed documents with increased await time
-        if documents_without_summaries:
-            logger.info(
-                f"Retrying {len(documents_without_summaries)} failed documents with increased await time..."
-            )
-            retry_results = await self.__process_batch(
-                documents_without_summaries, temperature, await_time_seconds=20
-            )
-            documents_with_summaries += retry_results
-
-        end_mem = process.memory_info().rss
-        memory_diff = end_mem - start_mem
+        end_mem = self.get_memory_usage()
+        memory_diff = end_mem['rss'] - start_mem['rss']
         logger.debug(
             f"Summarization batch completed. "
-            f"Final process memory usage: {end_mem // (1024 * 1024)} MB, "
-            f"Memory diff: {memory_diff // (1024 * 1024)} MB"
+            f"Final process memory usage: {end_mem['rss']} MB, "
+            f"Memory diff: {memory_diff} MB"
         )
 
-        success_count = len(documents_with_summaries)
+        success_count = len(summarized_documents)
         failed_count = total_docs - success_count
         logger.info(
             f"Summarization completed: "
@@ -130,38 +125,8 @@ Return the document in markdown format regardless of the original format.
             f"{failed_count}/{total_docs} failed ✗"
         )
 
-        return documents_with_summaries
+        return summarized_documents
 
-    async def __process_batch(
-        self, documents: list[Document], temperature: float, await_time_seconds: int
-    ) -> list[Document]:
-        """Process a batch of documents with specified await time.
-
-        Args:
-            documents: List of documents to summarize.
-            temperature: Temperature for the summarization model.
-            await_time_seconds: Time to wait between requests.
-        Returns:
-            list[Document]: Processed documents with summaries.
-        """
-        semaphore = asyncio.Semaphore(self.max_concurrent_requests)
-        tasks = [
-            self.__summarize(
-                document, semaphore, temperature, await_time_seconds=await_time_seconds
-            )
-            for document in documents
-        ]
-        results = []
-        for coro in tqdm(
-            asyncio.as_completed(tasks),
-            total=len(documents),
-            desc="Processing documents",
-            unit="doc",
-        ):
-            result = await coro
-            results.append(result)
-
-        return results
 
     async def __summarize(
         self,

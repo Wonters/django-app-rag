@@ -13,7 +13,7 @@ def get_logger(name):
     return logging.getLogger("django_app_rag." + name)
 
 
-def get_logger_loguru(name: str = None):
+def get_logger_loguru(name: str = None, name_file: str = None):
     """
     Get a loguru logger with automatic file logging based on module name.
     
@@ -36,7 +36,7 @@ def get_logger_loguru(name: str = None):
     
     # Determine log file name based on module name
 
-    log_file = log_dir / "rag.log"
+    log_file = log_dir / (name_file if name_file else "rag.log")
 
     
     # Remove existing handlers to avoid duplicates
@@ -130,7 +130,7 @@ def get_subprocess_logger(process_name: str):
         tuple: (loguru logger instance, log file path)
     """
     # Create logs directory if it doesn't exist
-    log_dir = Path("log/tasks")
+    log_dir = Path("log/subprocesses")
     log_dir.mkdir(exist_ok=True)
     
     # Create subprocess-specific log file

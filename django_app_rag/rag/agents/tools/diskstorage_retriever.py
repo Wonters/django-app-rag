@@ -60,7 +60,7 @@ class DiskStorageRetrieverTool(Tool):
             k=5,
             device=config["device"],
             persistent_path=config["data_dir"],
-            similarity_score_threshold=config.get("similarity_score_threshold", 0.5),
+            similarity_score_threshold=config.get("similarity_score_threshold", 0.8),
         )
 
     @mlflow_track(name="DiskStorageRetrieverTool.forward")

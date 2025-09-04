@@ -1,5 +1,6 @@
+import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from typing import Any, Generator
+from typing import Any, Generator, Optional
 from langchain_core.documents import Document as LangChainDocument
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from django_app_rag.logging import get_logger_loguru
@@ -12,12 +13,89 @@ from django_app_rag.rag.retrievers import (
     RetrieverType,
 )
 from django_app_rag.rag.splitters import SummarizationType
+from django_app_rag.rag.monitoring.processing_monitor import ProcessingContext
+from django_app_rag.rag.mixins.task_processing_mixin import DocumentProcessingMixin, TaskConfig, TaskResult
 
 logger = get_logger_loguru(__name__)
 
 MAX_CONCURRENT_REQUESTS = 10
 
-@step(enable_cache=False)
+
+class DocumentBatchProcessor(DocumentProcessingMixin[LangChainDocument, None]):
+    """Processor for batches of documents using the robust task processing mixin."""
+    
+    def __init__(self, retriever: Any, splitter: RecursiveCharacterTextSplitter, 
+                 batch_size: int = 4, max_workers: int = 2):
+        """
+        Initialize the document batch processor.
+        
+        Args:
+            retriever: Document retriever instance
+            splitter: Text splitter instance
+            batch_size: Number of documents per batch
+            max_workers: Maximum number of worker threads
+        """
+        config = TaskConfig(
+            max_workers=max_workers,
+            batch_size=batch_size,
+            timeout_per_item=300,  # 5 minutes per batch
+            timeout_total=600,     # 10 minutes total
+            max_consecutive_failures=3,
+            memory_limit_mb=1024,
+            heartbeat_interval=30
+        )
+        super().__init__("document_batch_processing", config)
+        
+        self.retriever = retriever
+        self.splitter = splitter
+    
+    def process_single_item(self, item: LangChainDocument, item_index: int) -> None:
+        """
+        Process a single document.
+        
+        Args:
+            item: The document to process
+            item_index: Index of the document in the batch
+            
+        Returns:
+            None (side effect: adds documents to retriever)
+        """
+        # Extract text and metadata
+        text = item.page_content
+        metadata = item.metadata
+        
+        if not text:
+            logger.warning(f"Empty content for document {item_index}")
+            return
+        
+        # Split document into chunks
+        try:
+            split_docs = self.splitter.create_documents([text], [metadata])
+            
+            if split_docs:
+                # Add to retriever
+                self.retriever.add_documents(split_docs)
+                logger.debug(f"Successfully processed document {item_index} into {len(split_docs)} chunks")
+            else:
+                logger.warning(f"No chunks generated for document {item_index}")
+                
+        except Exception as e:
+            logger.error(f"Error processing document {item_index}: {str(e)}")
+            raise
+    
+    def validate_item(self, item: LangChainDocument) -> bool:
+        """
+        Validate a document item.
+        
+        Args:
+            item: The document to validate
+            
+        Returns:
+            True if valid, False otherwise
+        """
+        return bool(item and hasattr(item, 'page_content') and item.page_content)
+
+@step()
 def chunk_embed_load(
     documents: list,
     collection_name: str,
@@ -82,97 +160,49 @@ def chunk_embed_load(
         if doc
     ]
     logger.info(f"Processing {len(docs)} documents for chunk embedding")
-    process_docs(
-        retriever,
-        docs,
+    
+    # Use the robust document processor
+    processor = DocumentBatchProcessor(
+        retriever=retriever,
         splitter=splitter,
         batch_size=processing_batch_size,
-        max_workers=processing_max_workers,
+        max_workers=processing_max_workers
     )
+    
+    result = processor.process_items(docs)
+    
+    if not result.success:
+        logger.error(f"Document processing failed: {result.error_message}")
+    else:
+        logger.info(f"Successfully processed {result.processed_count} documents in {result.total_time:.2f}s")
 
 
 
+# Legacy function kept for backward compatibility
 def process_docs(
     retriever: Any,
     docs: list[LangChainDocument],
     splitter: RecursiveCharacterTextSplitter,
     batch_size: int = 4,
     max_workers: int = 2,
+    monitor: Optional[Any] = None,
 ) -> list[None]:
-    """Process LangChain documents into Faiss using thread pool.
-
-    Args:
-        retriever: Faiss document retriever instance.
-        docs: List of LangChain documents to process.
-        splitter: Text splitter instance for chunking documents.
-        batch_size: Number of documents to process in each batch.
-        max_workers: Maximum number of concurrent threads.
-
-    Returns:
-        List of None values representing completed batch processing results.
+    """Legacy function - use DocumentBatchProcessor instead.
+    
+    This function is kept for backward compatibility but should be replaced
+    with DocumentBatchProcessor for better error handling and monitoring.
     """
-    batches = list(get_batches(docs, batch_size))
-    results = []
-    total_docs = len(docs)
-
-    with ThreadPoolExecutor(max_workers=max_workers) as executor:
-        futures = [
-            executor.submit(process_batch, retriever, batch, splitter)
-            for batch in batches
-        ]
-
-        with tqdm(total=total_docs, desc="Processing documents") as pbar:
-            for future in as_completed(futures):
-                result = future.result()
-                results.append(result)
-                pbar.update(batch_size)
-
-    return results
+    logger.warning("Using legacy process_docs function. Consider using DocumentBatchProcessor instead.")
+    
+    processor = DocumentBatchProcessor(
+        retriever=retriever,
+        splitter=splitter,
+        batch_size=batch_size,
+        max_workers=max_workers
+    )
+    
+    result = processor.process_items(docs)
+    return [None] * result.processed_count  # Return legacy format
 
 
-def get_batches(
-    docs: list[LangChainDocument], batch_size: int
-) -> Generator[list[LangChainDocument], None, None]:
-    """Return batches of documents to ingest into MongoDB.
-
-    Args:
-        docs: List of LangChain documents to batch.
-        batch_size: Number of documents in each batch.
-
-    Yields:
-        Generator[list[LangChainDocument]]: Batches of documents of size batch_size.
-    """
-    for i in range(0, len(docs), batch_size):
-        logger.info(f"Batch {i} of {len(docs)}")
-        yield docs[i : i + batch_size]
-
-
-def process_batch(
-    retriever: Any,
-    batch: list[LangChainDocument],
-    splitter: RecursiveCharacterTextSplitter,
-) -> None:
-    """Ingest batches of documents into MongoDB by splitting and embedding.
-
-    Args:
-        retriever: MongoDB Atlas document retriever instance.
-        batch: List of documents to ingest in this batch.
-        splitter: Text splitter instance for chunking documents.
-
-    Raises:
-        Exception: If there is an error processing the batch of documents.
-    """
-    try:
-        logger.info(f"Splitting {len(batch)} documents")
-        
-        # The splitter now handles parallelization internally
-        split_docs = splitter.split_documents(batch)
-        
-        if split_docs:
-            retriever.add_documents(split_docs)
-            logger.info(f"Successfully processed {len(batch)} documents with {len(split_docs)} chunks.")
-        else:
-            logger.warning(f"No chunks generated for batch of {len(batch)} documents")
-            
-    except Exception as e:
-        logger.warning(f"Error processing batch of {len(batch)} documents: {str(e)}")
+# Legacy functions removed - functionality moved to DocumentBatchProcessor

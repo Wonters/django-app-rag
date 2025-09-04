@@ -11,7 +11,7 @@ from django.utils import timezone
 import traceback
 
 
-logger = get_logger_loguru(__name__)
+logger = get_logger_loguru(__name__, "etl.log")
 
 SCRIPT_PATH = Path(__file__).parent.parent / "rag" / "run.py"
 
@@ -146,7 +146,7 @@ def launch_rag_indexing_process(
     queue_name="etl_tasks",
     actor_name="rag_app.etl_collection",
     time_limit=1000 * 60 * 60,
-    max_retries=1,
+    max_retries=2,
     store_results=True,
 )
 def indexing_collection_task(collection_id: int, storage_mode: str = "overwrite"):
@@ -180,7 +180,7 @@ def indexing_collection_task(collection_id: int, storage_mode: str = "overwrite"
         
         collection.sources.update(is_indexed_at=timezone.now())
         for source in collection.sources.all():
-            source.compute_quality_score()
+            source.compute_quality_score(reset=True)
         return {
             "status": "success",
             "message": f"Collection {collection_id} initialisée en mode {storage_mode} avec succès",
@@ -199,8 +199,8 @@ def indexing_collection_task(collection_id: int, storage_mode: str = "overwrite"
 @dramatiq.actor(
     queue_name="etl_tasks",
     actor_name="rag_app.etl_source",
-    time_limit=1000 * 60 * 20,
-    max_retries=1,
+    time_limit=1000 * 60 * 60,
+    max_retries=2,
     store_results=True,
 )
 def indexing_source_task(source_id: int, storage_mode: str = "append"):
@@ -235,7 +235,7 @@ def indexing_source_task(source_id: int, storage_mode: str = "append"):
         # Mettre à jour le timestamp d'indexation
         source.is_indexed_at = timezone.now()
         source.save()
-        source.compute_quality_score()
+        source.compute_quality_score(reset=True)
         
 
         return {

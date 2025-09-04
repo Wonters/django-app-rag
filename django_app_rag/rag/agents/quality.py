@@ -8,6 +8,7 @@ from pydantic import BaseModel
 from tqdm.asyncio import tqdm
 from django_app_rag.rag import utils 
 from django_app_rag.rag.models import Document
+from ..mixins.task_mixin_async import TaskMixinAsync
 
 logger = get_logger_loguru(__name__)
 class QualityScoreResponseFormat(BaseModel):
@@ -20,7 +21,7 @@ class QualityScoreResponseFormat(BaseModel):
     score: float
 
 
-class QualityScoreAgent:
+class QualityScoreAgent(TaskMixinAsync[Document]):
     """Evaluates the quality of documents using LiteLLM with async support.
 
     This class handles the interaction with language models through LiteLLM to
@@ -74,6 +75,7 @@ DOCUMENT:
         mock: bool = False,
         max_concurrent_requests: int = 10,
     ) -> None:
+        super().__init__()
         self.model_id = model_id
         self.mock = mock
         self.max_concurrent_requests = max_concurrent_requests
@@ -113,52 +115,40 @@ DOCUMENT:
         Returns:
             list[Document]: Documents with quality scores.
         """
-        process = psutil.Process(os.getpid())
-        start_mem = process.memory_info().rss
+        start_mem = self.get_memory_usage()
         total_docs = len(documents)
         logger.debug(
             f"Starting quality scoring batch with {self.max_concurrent_requests} concurrent requests. "
-            f"Current process memory usage: {start_mem // (1024 * 1024)} MB"
+            f"Current process memory usage: {start_mem['rss']} MB"
         )
 
-        scored_documents = await self.__process_batch(documents, await_time_seconds=7)
-        documents_with_scores = [
-            doc for doc in scored_documents if doc.content_quality_score is not None
-        ]
-        documents_without_scores = [
-            doc for doc in scored_documents if doc.content_quality_score is None
-        ]
+        # Use the mixin's process_with_retry method
+        scored_documents = await self.process_with_retry(
+            items=documents,
+            process_item_func=self.__get_quality_score,
+            success_condition=lambda doc: doc.content_quality_score is not None,
+            initial_await_time=7,
+            retry_await_time=20,
+            batch_name="Quality scoring"
+        )
 
-        # Retry failed documents with increased await time, as most failures are due to rate limiting.
-        if documents_without_scores:
-            logger.info(
-                f"Retrying {len(documents_without_scores)} failed documents with increased await time..."
-            )
-            retry_results = await self.__process_batch(
-                documents_without_scores, await_time_seconds=20
-            )
-
-            documents_with_scores += retry_results
-
-        end_mem = process.memory_info().rss
-        memory_diff = end_mem - start_mem
+        end_mem = self.get_memory_usage()
+        memory_diff = end_mem['rss'] - start_mem['rss']
         logger.debug(
             f"Quality scoring batch completed. "
-            f"Final process memory usage: {end_mem // (1024 * 1024)} MB, "
-            f"Memory diff: {memory_diff // (1024 * 1024)} MB"
+            f"Final process memory usage: {end_mem['rss']} MB, "
+            f"Memory diff: {memory_diff} MB"
         )
 
-        success_count = len(
-            [doc for doc in scored_documents if hasattr(doc, "quality_score")]
-        )
+        success_count = len(scored_documents)
         failed_count = total_docs - success_count
         
         # Log detailed failure information
         if failed_count > 0:
-            failed_docs = [doc for doc in scored_documents if not hasattr(doc, "quality_score")]
+            failed_docs = [doc for doc in documents if doc not in scored_documents]
             logger.warning(f"Failed documents details: {len(failed_docs)} documents failed")
             for i, doc in enumerate(failed_docs[:5]):  # Show first 5 failed docs
-                logger.warning(f"Failed doc {i+1}: ID={doc.id}, has_quality_score={hasattr(doc, 'quality_score')}")
+                logger.warning(f"Failed doc {i+1}: ID={doc.id}")
         
         logger.info(
             f"Quality scoring completed: "
@@ -168,48 +158,6 @@ DOCUMENT:
 
         return scored_documents
 
-    async def __process_batch(
-        self, documents: list[Document], await_time_seconds: int
-    ) -> list[Document]:
-        logger.info(f"Starting batch processing of {len(documents)} documents with {self.max_concurrent_requests} concurrent requests")
-        logger.info(f"Await time between requests: {await_time_seconds} seconds")
-        
-        semaphore = asyncio.Semaphore(self.max_concurrent_requests)
-        tasks = [
-            self.__get_quality_score(
-                document, semaphore, await_time_seconds=await_time_seconds
-            )
-            for document in documents
-        ]
-        
-        logger.debug(f"Created {len(tasks)} tasks for processing")
-        
-        results = []
-        completed_count = 0
-        failed_count = 0
-        
-        for coro in tqdm(
-            asyncio.as_completed(tasks),
-            total=len(documents),
-            desc="Processing documents",
-            unit="doc",
-        ):
-            try:
-                result = await coro
-                results.append(result)
-                completed_count += 1
-                
-                # Log progress every 50 documents
-                if completed_count % 50 == 0:
-                    logger.info(f"Processed {completed_count}/{len(documents)} documents")
-                    
-            except Exception as e:
-                logger.error(f"Error processing document in batch: {str(e)}")
-                failed_count += 1
-                results.append(None)
-
-        logger.info(f"Batch processing completed: {completed_count} succeeded, {failed_count} failed")
-        return results
 
     async def __get_quality_score(
         self,
@@ -217,39 +165,43 @@ DOCUMENT:
         semaphore: asyncio.Semaphore | None = None,
         await_time_seconds: int = 2,
     ) -> Document | None:
-        """Generate a summary for a single document.
+        """Generate a quality score for a single document.
 
         Args:
-            document: The Document object to summarize.
+            document: The Document object to score.
             semaphore: Optional semaphore for controlling concurrent requests.
             await_time_seconds: Time to wait for the model to respond.
         Returns:
-            Document | None: Document with generated summary or None if failed.
+            Document | None: Document with generated quality score or None if failed.
         """
-        print(f"[ENTRY] __get_quality_score called for document {document.id}")  # Force print
+        logger.debug(f"Starting quality score processing for document {document.id}")
+        
         if self.mock:
             logger.debug(f"Mock mode: returning quality score 0.5 for document {document.id}")
             return document.add_quality_score(score=0.5)
 
         async def process_document() -> Document:
             logger.debug(f"Processing document {document.id} for quality scoring")
-            print(f"[DEBUG] Processing document {document.id} for quality scoring")  # Force print
-            input_user_prompt = self.SYSTEM_PROMPT_TEMPLATE.format(
-                document=document.content
-            )
+            
             try:
-                input_user_prompt = utils.clip_tokens(
-                    input_user_prompt, max_tokens=8192, model_id=self.model_id
+                # Prepare the input prompt
+                input_user_prompt = self.SYSTEM_PROMPT_TEMPLATE.format(
+                    document=document.content
                 )
-            except Exception as e:
-                logger.warning(
-                    f"Failed to clip tokens for document {document.id}: {str(e)}"
-                )
+                
+                # Clip tokens if needed
+                try:
+                    input_user_prompt = utils.clip_tokens(
+                        input_user_prompt, max_tokens=8192, model_id=self.model_id
+                    )
+                except Exception as e:
+                    logger.warning(
+                        f"Failed to clip tokens for document {document.id}: {str(e)}"
+                    )
 
-            try:
+                # Call the API with proper error handling
                 logger.debug(f"Calling API for document {document.id} with model {self.model_id}")
-                print(f"[DEBUG] Calling API for document {document.id} with model {self.model_id}")  # Force print
-                # Add timeout to prevent hanging
+                
                 response = await asyncio.wait_for(
                     acompletion(
                         model=self.model_id,
@@ -258,21 +210,25 @@ DOCUMENT:
                         ],
                         stream=False,
                     ),
-                    timeout=30.0  # 30 second timeout
+                    timeout=30.0  # 30 second timeout per request
                 )
-                await asyncio.sleep(await_time_seconds)  # Rate limiting
+                
+                # Rate limiting
+                await asyncio.sleep(await_time_seconds)
                 
                 logger.debug(f"API response received for document {document.id}")
-                print(f"[DEBUG] API response received for document {document.id}")  # Force print
 
-                if not response.choices:
+                # Validate response
+                if not response or not response.choices:
                     logger.warning(
                         f"No quality score generated for document {document.id} - no choices in response"
                     )
                     return document
 
+                # Parse the response
                 raw_answer = response.choices[0].message.content
                 logger.debug(f"Received response for document {document.id}: {raw_answer[:100]}...")
+                
                 quality_score = self._parse_model_output(raw_answer)
                 if not quality_score:
                     logger.warning(
@@ -280,25 +236,28 @@ DOCUMENT:
                     )
                     return document
 
-                result_doc = document.add_quality_score(
-                    score=quality_score.score,
-                )
+                # Add the quality score to the document
+                result_doc = document.add_quality_score(score=quality_score.score)
                 logger.debug(f"Successfully added quality score {quality_score.score} to document {document.id}")
                 return result_doc
+                
             except asyncio.TimeoutError:
                 logger.warning(f"Timeout while scoring document {document.id}")
-                print(f"[WARNING] Timeout while scoring document {document.id}")  # Force print
                 return document
             except Exception as e:
                 logger.warning(f"Failed to score document {document.id}: {str(e)}")
-                print(f"[WARNING] Failed to score document {document.id}: {str(e)}")  # Force print
                 return document
 
-        if semaphore:
-            async with semaphore:
+        # Execute with semaphore if provided
+        try:
+            if semaphore:
+                async with semaphore:
+                    return await process_document()
+            else:
                 return await process_document()
-
-        return await process_document()
+        except Exception as e:
+            logger.error(f"Critical error processing document {document.id}: {str(e)}")
+            return document
 
     def _parse_model_output(
         self, answer: str | None

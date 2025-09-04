@@ -6,10 +6,11 @@ from ..retrievers import RetrieverType
 from ..splitters import SummarizationType
 from ..steps.compute_rag_vector_index import chunk_embed_load, filter_by_quality
 from ..steps.infrastructure import read_documents_from_diskstorage
+from django_app_rag.rag.settings import settings
 
 logger = get_logger_loguru(__name__)
 
-@pipeline(enable_cache=True)
+@pipeline(enable_cache=settings.ENABLE_CACHE)
 def compute_rag_vector_index(
     collection_name: str,
     fetch_limit: int,

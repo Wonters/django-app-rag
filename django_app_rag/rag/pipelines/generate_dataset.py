@@ -8,9 +8,9 @@ from ..steps.infrastructure import (
     push_to_huggingface,
     save_dataset_to_disk,
 )
+from django_app_rag.rag.settings import settings
 
-
-@pipeline
+@pipeline(enable_cache=settings.ENABLE_CACHE)
 def generate_dataset(
     collection_name: str,
     load_dataset_id: str,

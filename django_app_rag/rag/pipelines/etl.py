@@ -8,10 +8,11 @@ from ..steps.infrastructure import (
     move_tmp_files,
 )
 from ..steps.infrastructure.save_to_diskstorage import save_to_diskstorage
+from django_app_rag.rag.settings import settings
 
 logger = get_logger_loguru(__name__)
 
-@pipeline(enable_cache=True)
+@pipeline(enable_cache=settings.ENABLE_CACHE)
 def etl_mixed(
     data_dir: Path,
     collection_name: str,
@@ -86,12 +87,16 @@ def etl_mixed(
                 data_directory=urls_data_dir, nesting_level=0
             )
     
+
+    
     # Combiner tous les documents
     all_documents = combine_documents(
         notion_documents=notion_documents,
         files_documents=files_documents,
         urls_documents=urls_documents,
     )
+        # Déplacer les fichiers temporaires après la lecture des documents
+    move_tmp_files(data_dir=root_data_dir, storage_mode=storage_mode, documents_dummy=all_documents, force_cleanup=True)
     
     if not all_documents:
         logger.warning("No documents found to process")
@@ -116,4 +121,3 @@ def etl_mixed(
         data_dir=root_data_dir.as_posix(),
         mode=storage_mode
     )
-    move_tmp_files(data_dir=root_data_dir, storage_mode=storage_mode)

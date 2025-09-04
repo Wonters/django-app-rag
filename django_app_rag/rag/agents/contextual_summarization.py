@@ -7,6 +7,7 @@ from openai import AsyncOpenAI
 from pydantic import BaseModel
 from tqdm.asyncio import tqdm
 from ..settings import settings
+from ..mixins.task_mixin_async import TaskMixinAsync
 
 logger = get_logger_loguru(__name__)
 class ContextualDocument(BaseModel):
@@ -35,7 +36,7 @@ class ContextualDocument(BaseModel):
         return self
 
 
-class ContextualSummarizationAgent:
+class ContextualSummarizationAgent(TaskMixinAsync[ContextualDocument]):
     """Generates summaries for documents using LiteLLM with async support.
 
     This class handles the interaction with language models through LiteLLM to
@@ -67,6 +68,7 @@ Please give a short succinct context of maximum {characters} characters to situa
         mock: bool = False,
         max_concurrent_requests: int = 4,
     ) -> None:
+        super().__init__()
         self.model_id = model_id
         self.max_characters = max_characters
         self.mock = mock
@@ -105,50 +107,36 @@ Please give a short succinct context of maximum {characters} characters to situa
         Returns:
             list[str]: List of chunks with added contextual summaries
         """
-
-        process = psutil.Process(os.getpid())
-        start_mem = process.memory_info().rss
+        start_mem = self.get_memory_usage()
         total_chunks = len(chunks)
         logger.debug(
             f"Starting contextual summarization for {total_chunks} chunks with {self.max_concurrent_requests} concurrent requests. "
-            f"Initial memory usage: {start_mem // (1024 * 1024)} MB"
+            f"Initial memory usage: {start_mem['rss']} MB"
         )
 
         documents = [
             ContextualDocument(content=content, chunk=chunk) for chunk in chunks
         ]
 
-        summarized_documents = await self.__process_batch(
-            documents, await_time_seconds=7
+        # Use the mixin's process_with_retry method
+        summarized_documents = await self.process_with_retry(
+            items=documents,
+            process_item_func=self.__summarize_context,
+            success_condition=lambda doc: doc.contextual_summarization is not None,
+            initial_await_time=7,
+            retry_await_time=20,
+            batch_name="Contextual summarization"
         )
-        documents_with_summaries = [
-            doc
-            for doc in summarized_documents
-            if doc.contextual_summarization is not None
-        ]
-        documents_without_summaries = [
-            doc for doc in documents if doc.contextual_summarization is None
-        ]
 
-        # Retry failed documents with increased await time
-        if documents_without_summaries:
-            logger.info(
-                f"Retrying {len(documents_without_summaries)} failed documents with increased await time..."
-            )
-            retry_results = await self.__process_batch(
-                documents_without_summaries, await_time_seconds=20
-            )
-            documents_with_summaries += retry_results
-
-        end_mem = process.memory_info().rss
-        memory_diff = end_mem - start_mem
+        end_mem = self.get_memory_usage()
+        memory_diff = end_mem['rss'] - start_mem['rss']
         logger.debug(
             f"Contextual summarization completed. "
-            f"Final memory usage: {end_mem // (1024 * 1024)} MB, "
-            f"Memory difference: {memory_diff // (1024 * 1024)} MB"
+            f"Final memory usage: {end_mem['rss']} MB, "
+            f"Memory difference: {memory_diff} MB"
         )
 
-        success_count = len(documents_with_summaries)
+        success_count = len(summarized_documents)
         failed_count = total_chunks - success_count
         logger.info(
             f"Contextual summarization results: "
@@ -157,7 +145,7 @@ Please give a short succinct context of maximum {characters} characters to situa
         )
 
         contextual_chunks = []
-        for doc in documents_with_summaries:
+        for doc in summarized_documents:
             if doc.contextual_summarization is not None:
                 chunk = f"{doc.contextual_summarization}\n\n{doc.chunk}"
             else:
@@ -167,37 +155,6 @@ Please give a short succinct context of maximum {characters} characters to situa
 
         return contextual_chunks
 
-    async def __process_batch(
-        self, documents: list[ContextualDocument], await_time_seconds: int
-    ) -> list[ContextualDocument]:
-        """Process a batch of documents with specified await time.
-
-        Args:
-            documents: List of documents to summarize
-            await_time_seconds: Time in seconds to wait between requests
-
-        Returns:
-            list[ContextualDocument]: Processed documents with summaries
-        """
-
-        semaphore = asyncio.Semaphore(self.max_concurrent_requests)
-        tasks = [
-            self.__summarize_context(
-                document, semaphore, await_time_seconds=await_time_seconds
-            )
-            for document in documents
-        ]
-        results = []
-        for coro in tqdm(
-            asyncio.as_completed(tasks),
-            total=len(documents),
-            desc="Processing documents",
-            unit="doc",
-        ):
-            result = await coro
-            results.append(result)
-
-        return results
 
     async def __summarize_context(
         self,
@@ -257,7 +214,7 @@ Please give a short succinct context of maximum {characters} characters to situa
         return await process_document()
 
 
-class SimpleSummarizationAgent:
+class SimpleSummarizationAgent(TaskMixinAsync[ContextualDocument]):
     """Generates summaries for documents using LiteLLM with async support.
 
     This class handles the interaction with language models through LiteLLM to
@@ -293,6 +250,7 @@ highlighting the most significant insights. Answer only with the succinct contex
         mock: bool = False,
         max_concurrent_requests: int = 4,
     ) -> None:
+        super().__init__()
         self.model_id = model_id
         self.base_url = base_url
         self.api_key = api_key

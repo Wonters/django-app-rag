@@ -10,7 +10,7 @@ from django_app_rag.models import Source, Answer, Document
 from django_app_rag.logging import get_logger_loguru
 from django_app_rag.rag.agents.tools import QuestionAnswerTool, DiskStorageRetrieverTool
 
-logger = get_logger_loguru(__name__)
+logger = get_logger_loguru(__name__, "qa.log")
 
 
 class TaskStatus(str, Enum):
@@ -137,7 +137,8 @@ def launch_qa_process(source_id: int, config_path: str):
     """
     start_time = time.time()
     try:
-        logger.info(f"Démarrage du processus QA pour la source {source_id}")
+        logger.info("--------------------------------")
+        logger.info(f"🚀 Démarrage du processus QA pour la source {source_id}")
         
                 # Valider le chemin de configuration
         if not config_path:
@@ -262,7 +263,14 @@ def launch_qa_process(source_id: int, config_path: str):
                 try:
                     logger.info(f"Récupération des documents pour la question: {question.field}")
                     documents = agent_retriever.forward(question.field)
-                    logger.info(f"Documents récupérés: {len(documents) if documents else 0}")
+                    
+                    # Parse the JSON to get actual document count
+                    try:
+                        docs_data = json.loads(documents) if documents else {}
+                        doc_count = docs_data.get('total_count', 0) if isinstance(docs_data, dict) else 0
+                        logger.info(f"Documents récupérés: {doc_count} (JSON: {len(documents) if documents else 0} caractères)")
+                    except json.JSONDecodeError:
+                        logger.info(f"Documents récupérés: JSON invalide (longueur: {len(documents) if documents else 0} caractères)")
                     
                     if not documents:
                         logger.warning(f"Aucun document récupéré pour la question {question.title}")
@@ -288,12 +296,17 @@ def launch_qa_process(source_id: int, config_path: str):
                 # Parse the answer data
                 try:
                     answer_json = json.loads(answer_data)
-                    logger.info(f"Réponse parsée avec succès pour la question {question.title} {answer_json}")
+                    logger.info(f"Réponse parsée avec succès pour la question {question.title} {json.dumps(answer_json, ensure_ascii=False)}")
                 except json.JSONDecodeError as json_error:
                     logger.error(f"Erreur de parsing JSON pour la question {question.title}: {json_error}")
                     logger.error(f"Données brutes: {answer_data}")
                     # Skip this question and continue
                     continue
+                
+                # Handle case where answer_json is a list containing one dictionary
+                if isinstance(answer_json, list) and len(answer_json) > 0:
+                    answer_json = answer_json[0]
+                    logger.info(f"Réponse extraite de la liste pour la question {question.title}")
                 
                 logger.info(f"Réponse générée pour la question {question.title}: {answer_json.get('answer', '')[:100]}...")
                 

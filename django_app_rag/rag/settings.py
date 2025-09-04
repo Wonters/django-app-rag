@@ -72,6 +72,9 @@ class Settings(BaseSettings):
     OPENAI_MODEL_ID: str = Field(
         default="gpt-4o-mini", description="Identifier for the OpenAI model to be used."
     )
+    ENABLE_CACHE: bool = Field(
+        default=True, description="Whether to enable cache for pipelines."
+    )
 
     @field_validator("OPENAI_API_KEY")
     @classmethod

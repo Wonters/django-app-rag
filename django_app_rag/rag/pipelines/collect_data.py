@@ -7,12 +7,13 @@ from ..steps.collect_notion_data import (
     extract_notion_documents,
     extract_notion_documents_metadata,
 )
+from django_app_rag.rag.settings import settings
 from ..steps.infrastructure import save_documents_to_disk, upload_to_s3
 from django_app_rag.logging import get_logger_loguru
 
 logger = get_logger_loguru(__name__)
 
-@pipeline(enable_cache=True)
+@pipeline(enable_cache=settings.ENABLE_CACHE)
 def collect_data(
     data_dir: Path,
     file_paths: Optional[list[Path]] = None,
