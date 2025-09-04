@@ -1,20 +1,26 @@
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
+from rest_framework.exceptions import ValidationError, NotFound
 from django.views.generic import TemplateView
 from django.conf import settings
 from rest_framework.viewsets import ModelViewSet
-from .models import Question, Collection
+from .models import Question, Collection, Document
 from .serializer import SourceSerializer, QuestionSerializer, CollectionSerializer
 from django.views.generic.edit import FormView, CreateView
 from .models import Source
 from .forms import SourceForm, QuestionForm, CollectionForm
 import logging 
+from .models import Question
 from .tasks.mixins import TaskViewMixin
 from .tasks.etl_tasks import indexing_collection_task, indexing_source_task
 from pathlib import Path
+from .tasks.rag_tasks import launch_qa_process
+from .models import Question
+from django_app_rag.rag.retrievers import get_document_text_cached
 
 logger = logging.getLogger(__name__)
+
 
 class MainRAGTemplateView(TemplateView):
     """
@@ -173,6 +179,7 @@ class SourceFormView(FormView):
 
     def post(self, request, *args, **kwargs):
         """
+        #todo: revoir cette méthode, c'est pas propre
         Post the form.
         Source form is done in two steps:
         - First step: get the form and select type of source, it returns the form with 
@@ -184,15 +191,21 @@ class SourceFormView(FormView):
         form = self.get_form()
         # On vérifie si le champ spécifique est rempli
         specific_field = self.form_class.fields_map.get(selected_type)
+        logger.info(f"specific_field: {specific_field}")
 
         if not specific_field or not request.POST.get(specific_field) and not request.FILES.get(specific_field):
-            # Si le champ spécifique n'est pas encore rempli, on réaffiche le formulaire avec le champ spécifique
-            return self.render_to_response(self.get_context_data(form=form))
+            if request.path.endswith('edit/'):
+                pass
+            else:
+                logger.warning(f"Form is invalid: POST {request.POST} FILES {request.FILES}")
+                # Si le champ spécifique n'est pas encore rempli, on réaffiche le formulaire avec le champ spécifique
+                return self.render_to_response(self.get_context_data(form=form))
         # Sinon, on valide et sauvegarde
         if form.is_valid():
             logger.info(f"Form is valid: {form.cleaned_data}")
             form.save()
             return self.form_valid(form)
+        logger.info(f"Form is invalid: {form.errors}")
         return self.form_invalid(form)
     
 
@@ -423,7 +436,7 @@ class LaunchQAView(APIView, TaskViewMixin):
             )
         
         # Lancer la tâche QA
-        from .tasks.rag_tasks import launch_qa_process
+        
         
         return self.launch_task(
             task_func=launch_qa_process,
@@ -451,3 +464,86 @@ class LaunchQAView(APIView, TaskViewMixin):
             )
         
         return self.get_task_status(task_id, "Processus QA")
+
+class ChunkTextView(APIView):
+    """
+    Vue pour récupérer le texte d'un chunk par son UID
+    """
+    
+    def get(self, request, *args, **kwargs):
+        """
+        Récupère le texte d'un chunk par son UID
+        """
+        # Validation des paramètres
+        uid = request.query_params.get('uid')
+        question_id = request.query_params.get('question_id')
+        
+        if not uid:
+            raise ValidationError({"uid": "Le paramètre 'uid' est requis"})
+        
+        if not question_id:
+            raise ValidationError({"question_id": "Le paramètre 'question_id' est requis"})
+        
+        # Récupération de la collection via question_id
+        try:
+            question = Question.objects.select_related('source__collection').get(id=question_id)
+            collection = question.source.collection
+            data_dir = str(collection.get_rag_data_dir())
+        except Question.DoesNotExist:
+            raise NotFound(f"Question avec l'ID {question_id} non trouvée")
+        
+        # Récupération du texte du chunk
+        from django_app_rag.rag.retrievers import get_chunk_text_by_uid
+        chunk_text = get_chunk_text_by_uid(data_dir, uid)
+        
+        if chunk_text is None:
+            raise NotFound(f"Aucun chunk trouvé pour l'UID: {uid}")
+        
+        logger.info(f"Chunk text: {chunk_text}")
+        return Response({
+            "uid": uid,
+            "text": chunk_text,
+            "question_id": question_id
+        })
+
+
+class DocumentTextView(APIView):
+    """
+    Vue pour récupérer le texte complet d'un document par son ID depuis le DiskStorage
+    """
+    
+    def get(self, request, *args, **kwargs):
+        """
+        Récupère le texte complet d'un document par son ID
+        """
+        # Validation des paramètres
+        document_id = request.query_params.get('document_id')
+        question_id = request.query_params.get('question_id')
+        
+        if not document_id:
+            raise ValidationError({"document_id": "Le paramètre 'document_id' est requis"})
+        
+        if not question_id:
+            raise ValidationError({"question_id": "Le paramètre 'question_id' est requis"})
+        
+        # Récupération de la collection via question_id
+        try:
+            question = Question.objects.select_related('source__collection').get(id=question_id)
+            collection = question.source.collection
+            
+        except Question.DoesNotExist:
+            raise NotFound(f"Question avec l'ID {question_id} non trouvée")
+        
+        # Récupération du document
+        document_data = get_document_text_cached(document_id, collection.get_rag_data_dir(), collection.get_rag_config_collection_name())
+        
+        if document_data is None:
+            raise NotFound(f"Document avec l'ID {document_id} non trouvé")
+        
+        return Response({
+            "document_id": document_id,
+            "document_data": document_data,
+            "question_id": question_id
+        })
+            
+

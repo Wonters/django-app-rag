@@ -4,6 +4,7 @@ from pathlib import Path
 import yaml
 import numpy as np
 from pathlib import Path
+from functools import lru_cache
 from django_app_rag.logging import get_logger
 from django_app_rag.app_settings import app_rag_config
 from django_app_rag.rag.infrastructur.disk_storage import DiskStorage
@@ -30,6 +31,8 @@ class Document(models.Model):
     url = models.URLField(blank=True, null=True)
     title = models.CharField(max_length=255)
     uid = models.CharField(max_length=255)
+
+            
 
 
 class Source(models.Model):

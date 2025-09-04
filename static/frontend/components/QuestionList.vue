@@ -54,10 +54,18 @@
                                   <span v-else class="text-muted">-</span>
                                 </td>
                                 <td>
-                                  <span v-if="document.similarity_score" class="badge bg-secondary">
-                                    {{ (document.similarity_score * 100).toFixed(1) }}%
-                                  </span>
-                                  <span v-else class="text-muted">-</span>
+                                  <div class="d-flex align-items-center gap-2">
+                                    <span v-if="document.similarity_score" class="badge bg-secondary">
+                                      {{ (document.similarity_score * 100).toFixed(1) }}%
+                                    </span>
+                                    <span v-else class="text-muted">-</span>
+                                    <ChunkTextModal 
+                                      :uid="document.uid" 
+                                      :question-id="question.id"
+                                      @chunk-loaded="onChunkLoaded"
+                                      @error="onChunkError"
+                                    />
+                                  </div>
                                 </td>
                               </tr>
                             </tbody>
@@ -100,6 +108,7 @@ import 'bootstrap/dist/js/bootstrap.bundle.min.js';
 import { useTooltips } from '../composables/useTooltips';
 import { useDataTable } from '../composables/useDataTable';
 import { useErrorHandler } from '../composables/useErrorHandler.js';
+import ChunkTextModal from './ChunkTextModal.vue';
 
 const { t } = useI18n();
 
@@ -152,6 +161,16 @@ function deleteQuestion(questionId) {
   emit('delete-question', questionId);
 }
 
+function onChunkLoaded(data) {
+  logger.info('Chunk chargé:', data);
+  // Optionnel: afficher une notification de succès
+}
+
+function onChunkError(error) {
+  logger.error('Erreur lors du chargement du chunk:', error);
+  // Optionnel: afficher une notification d'erreur
+}
+
 onMounted(async () => {
   isComponentMounted.value = true;
   try {
@@ -201,6 +220,14 @@ watch(() => props.questions, async () => {
     logger.warn('Erreur lors de la mise à jour du tableau:', error);
   }
 }, { deep: true });
+</script>
+
+<script>
+export default {
+  components: {
+    ChunkTextModal
+  }
+};
 </script>
 
 <style scoped>

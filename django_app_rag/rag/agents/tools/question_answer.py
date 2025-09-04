@@ -118,7 +118,8 @@ class QuestionAnswerTool(Tool):
                         "chunk_preview": chunk_info.get("chunk_preview")
                     })
                     
-                    logger.debug(f"QuestionAnswerTool - Document {i}: {doc.get('title', '')[:50]}...")
+                    logger.debug(f"QuestionAnswerTool - Document {i}: {doc.get('id', '')[:50]}...")
+                    logger.debug(f"   Title: {doc.get('title', '')[:50]}...")
                     logger.debug(f"   Score: {doc.get('score')}")
                     logger.debug(f"   Longueur du chunk: {chunk_info.get('chunk_length')} caractères")
                     logger.debug(f"   Aperçu: {chunk_info.get('chunk_preview', '')[:80]}...")

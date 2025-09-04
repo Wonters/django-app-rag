@@ -7,6 +7,7 @@ const isDev = process.env.NODE_ENV === 'development';
 // Logger conditionnel - maintenant exporté directement
 export const logger = {
   log: (...args) => isDev && console.log(...args),
+  info: (...args) => isDev && console.info(...args),
   warn: (...args) => isDev && console.warn(...args),
   error: (...args) => console.error(...args) // Toujours log les erreurs
 };

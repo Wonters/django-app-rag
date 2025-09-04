@@ -1,6 +1,6 @@
 from django.urls import path, include
 from .views import (MainRAGTemplateView, CollectionsModelViewSet, SourceFormView, SourceModelViewSet, 
- QuestionFormView, QuestionModelViewSet, CollectionFormTemplateView, ETLTaskView, LaunchQAView)
+ QuestionFormView, QuestionModelViewSet, CollectionFormTemplateView, ETLTaskView, LaunchQAView, ChunkTextView, DocumentTextView)
 from rest_framework.routers import DefaultRouter
 
 app_name = 'django_app_rag'
@@ -22,4 +22,6 @@ urlpatterns = [
     path('api/', include(router.urls)),
     path('api/etl/', ETLTaskView.as_view(), name='etl-task'),
     path('api/qa/', LaunchQAView.as_view(), name='qa-task'),
+    path('api/chunk-text/', ChunkTextView.as_view(), name='chunk-text'),
+    path('api/document-text/', DocumentTextView.as_view(), name='document-text'),
 ] 
