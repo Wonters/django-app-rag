@@ -21,6 +21,10 @@ export default defineConfig({
   resolve: {
     alias: {
       '@': resolve(__dirname, 'frontend')
-    }
+    },
+    modules: [
+      resolve(__dirname, '../../bundles/node_modules'),
+      'node_modules'
+    ]
   }
 }); 
