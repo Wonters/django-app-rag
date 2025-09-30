@@ -1,30 +1,25 @@
-crawl4ai==0.7.1
-loguru==0.7.3
+crawl4ai==0.7.4
 tiktoken==0.11.0
-pydantic-settings>=2.4.0
-django>=5.0.0
+pydantic-settings==2.11.0
 django-dramatiq>=0.14.0
-django-cors-headers==4.0.0
-django-rest-framework==0.1.0
 datasets==4.0.0
 langchain==0.3.27
 langchain-community==0.3.27
 langchain-huggingface==0.3.1
 zenml==0.84.2
-boto3==1.40.6
+boto3==1.40.40
+litellm>=1.0.0
 langchain-openai==0.3.30
 openai==1.99.9
 sqlitedict==2.1.0
 dramatiq==1.15.0
 faiss-cpu==1.11.0
-numpy>=1.21.0
 smolagents==1.21.1
 mlflow==3.2.0
 sentence-transformers==5.1.0
 tesserocr>=0.1.8
-Pillow>=9.0.0
 docling>=2.44.0
 pytest-django>=4.5.2
-pytest>=7.0.0
-torch==2.4.1+cpu torchvision==0.19.1+cpu --index-url https://download.pytorch.org/whl/cpu
+# torch==2.4.1  # Temporarily disabled due to I/O issues
+# torchvision==0.19.1  # Temporarily disabled due to I/O issues
 

@@ -6,7 +6,7 @@ export default defineConfig({
   plugins: [vue()],
   root:'.',
   build: {
-    outDir: resolve(__dirname, 'dist'),
+    outDir: resolve(__dirname, '..', 'static', 'django_app_rag', 'dist'),
     emptyOutDir: true,
     manifest: true,
     rollupOptions: {

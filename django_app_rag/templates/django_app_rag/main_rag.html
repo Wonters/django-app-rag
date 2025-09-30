@@ -1,5 +1,6 @@
 {% extends "django_app_rag/base.html" %}
 {% load static %}
+{% load vite_tags %}
 
 {% block title %}RAG Frontend{% endblock %}
 {% block content %}
@@ -7,14 +8,16 @@
 {% endblock %}
 
 {% block extra-js %}
-{% if debug %}
+<!-- {% if debug %}
 <script type="module" src="http://localhost:3000/@vite/client"></script>
-<!-- <script type="module" src="{% static 'frontend/main.js' %}"></script> -->
 <script type="module" src="http://localhost:3000/frontend/main.js"></script>
 {% else %}
-<!-- En prod, charger le build Vite (adapter le chemin si besoin) -->
-<script type="module" src="/static/dist/main.js"></script>
-{% endif %}
+<link rel="stylesheet" href="{% vite_css 'frontend/main.js' %}">
+<script type="module" src="{% vite_asset 'frontend/main.js' %}"></script>
+{% endif %} -->
+<link rel="stylesheet" href="{% vite_css 'frontend/main.js' %}">
+<!-- JS généré par Vite -->
+<script type="module" src="{% vite_asset 'frontend/main.js' %}"></script>
 <script>
     window.SOURCE_FORM_URL = "{% url 'django_app_rag:source-add' %}";
     window.SOURCE_EDIT_URL = "{% url 'django_app_rag:source-edit' pk='__pk__' %}";
