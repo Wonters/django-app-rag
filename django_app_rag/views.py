@@ -10,14 +10,13 @@ from .serializer import SourceSerializer, QuestionSerializer, CollectionSerializ
 from django.views.generic.edit import FormView, CreateView
 from .models import Source
 from .forms import SourceForm, QuestionForm, CollectionForm
-import logging 
-from .models import Question
+import logging
 from .tasks.mixins import TaskViewMixin
 from .tasks.etl_tasks import indexing_collection_task, indexing_source_task
 from pathlib import Path
 from .tasks.rag_tasks import launch_qa_process
-from .models import Question
 from django_app_rag.rag.retrievers import get_document_text_cached
+from .pagination import StandardResultsSetPagination
 
 logger = logging.getLogger(__name__)
 
@@ -35,10 +34,15 @@ class MainRAGTemplateView(TemplateView):
 
 class CollectionsModelViewSet(ModelViewSet):
     """
-    Collection viewset
+    Collection viewset with pagination and optimizations.
     """
-    queryset = Collection.objects.all()
+    queryset = Collection.objects.all().prefetch_related('sources', 'rag_configs')
     serializer_class = CollectionSerializer
+    pagination_class = StandardResultsSetPagination
+    filterset_fields = ['title']
+    search_fields = ['title', 'description']
+    ordering_fields = ['created_at', 'updated_at', 'title']
+    ordering = ['-created_at']
 
 class CollectionFormTemplateView(FormView):
     """
@@ -98,27 +102,38 @@ class CollectionFormTemplateView(FormView):
 
 class SourceModelViewSet(ModelViewSet):
     """
-    Source viewset
+    Source viewset with pagination and optimizations.
     """
-    queryset = Source.objects.all()
+    queryset = Source.objects.all().select_related('collection').prefetch_related('questions')
     serializer_class = SourceSerializer
-    
+    pagination_class = StandardResultsSetPagination
+    filterset_fields = ['type', 'collection']
+    search_fields = ['title', 'link']
+    ordering_fields = ['created_at', 'is_indexed_at', 'quality_score', 'title']
+    ordering = ['-created_at']
+
     def get_queryset(self):
-        queryset = Source.objects.all()
+        queryset = super().get_queryset()
         collection_id = self.request.query_params.get('collection', None)
         if collection_id is not None:
             queryset = queryset.filter(collection_id=collection_id)
         return queryset
 
+
 class QuestionModelViewSet(ModelViewSet):
     """
-    Question viewset
+    Question viewset with pagination and optimizations.
     """
-    queryset = Question.objects.all()
+    queryset = Question.objects.all().select_related('source', 'source__collection', 'answer').prefetch_related('answer__documents')
     serializer_class = QuestionSerializer
-    
+    pagination_class = StandardResultsSetPagination
+    filterset_fields = ['source']
+    search_fields = ['title', 'field']
+    ordering_fields = ['created_at', 'title']
+    ordering = ['-created_at']
+
     def get_queryset(self):
-        queryset = Question.objects.all()
+        queryset = super().get_queryset()
         source_id = self.request.query_params.get('source_id', None)
         if source_id is not None:
             queryset = queryset.filter(source_id=source_id)

@@ -13,6 +13,7 @@ from langchain_community.vectorstores import FAISS
 from langchain_core.callbacks import CallbackManagerForRetrieverRun
 from langchain.retrievers.multi_vector import SearchType
 from django_app_rag.rag.infrastructur.faiss.persistent_store import SQLiteDocStore
+from django_app_rag.path_utils import ensure_path, ensure_str, safe_join
 
 logger = get_logger_loguru(__name__)
 
@@ -31,10 +32,10 @@ class FaissParentDocumentRetriever(ParentDocumentRetriever):
         persistent_path:str ="data/",
         similarity_score_threshold: float = 0.5,
     ):
-        persistent_path = Path(persistent_path) / "faiss_store"
+        persistent_path = safe_join(ensure_path(persistent_path), "faiss_store")
         # VectorStore FAISS instanciation
         if os.path.exists(persistent_path):
-            vectorstore = FAISS.load_local(persistent_path,
+            vectorstore = FAISS.load_local(ensure_str(persistent_path),
                              embeddings=embedding_model,
                              index_name="index",
                              allow_dangerous_deserialization=True)
@@ -57,8 +58,8 @@ class FaissParentDocumentRetriever(ParentDocumentRetriever):
 
 
         # Initialize persistent docstore using SQLite
-        docstore_path = persistent_path / "parent_docstore.db"
-        docstore = SQLiteDocStore(str(docstore_path))
+        docstore_path = safe_join(persistent_path, "parent_docstore.db")
+        docstore = SQLiteDocStore(ensure_str(docstore_path))
         logger.info(f"Using persistent SQLiteDocStore at {docstore_path}")
 
         super().__init__(

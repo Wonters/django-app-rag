@@ -9,11 +9,12 @@ import sys
 from django_app_rag.models import Collection, Source
 from django.utils import timezone
 import traceback
+from django_app_rag.path_utils import safe_join, ensure_str
 
 
 logger = get_logger_loguru(__name__, "etl.log")
 
-SCRIPT_PATH = Path(__file__).parent.parent / "rag" / "run.py"
+SCRIPT_PATH = safe_join(Path(__file__).parent.parent, "rag", "run.py")
 
 
 
@@ -41,7 +42,7 @@ def run_rag_process(script_path: Path, name: str, config_path: Path):
         logger.info(f"Fichier de log du sous-processus '{name}': {subprocess_log_file}")
         
         with sp.Popen(
-            [sys.executable, str(script_path), name, "--config", config_path],
+            [sys.executable, ensure_str(script_path), name, "--config", ensure_str(config_path)],
             stderr=sp.PIPE,
             stdout=sp.PIPE,
             text=True,

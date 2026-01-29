@@ -1,4 +1,4 @@
-import dramatiq 
+import dramatiq
 import json
 import time
 import traceback
@@ -9,6 +9,7 @@ from enum import Enum
 from django_app_rag.models import Source, Answer, Document
 from django_app_rag.logging import get_logger_loguru
 from django_app_rag.rag.agents.tools import QuestionAnswerTool, DiskStorageRetrieverTool
+from django_app_rag.path_utils import ensure_path
 
 logger = get_logger_loguru(__name__, "qa.log")
 
@@ -130,7 +131,7 @@ def _validate_config_path(config_path: str) -> Path:
     if not config_path:
         raise ValueError("Chemin de configuration manquant")
 
-    config_path_obj = Path(config_path)
+    config_path_obj = ensure_path(config_path)
     if not config_path_obj.exists():
         raise FileNotFoundError(f"Fichier de configuration introuvable: {config_path}")
 
