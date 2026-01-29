@@ -120,6 +120,243 @@ def create_success_response(source_id: int, config_path: str, processed: int, to
     return response.to_dict()
 
 
+def _validate_config_path(config_path: str) -> Path:
+    """
+    Validate and return config path as Path object.
+
+    Raises:
+        ValueError: If config_path is missing or file doesn't exist
+    """
+    if not config_path:
+        raise ValueError("Chemin de configuration manquant")
+
+    config_path_obj = Path(config_path)
+    if not config_path_obj.exists():
+        raise FileNotFoundError(f"Fichier de configuration introuvable: {config_path}")
+
+    logger.info(f"Configuration validée: {config_path}")
+    return config_path_obj
+
+
+def _get_source_with_questions(source_id: int):
+    """
+    Retrieve source and its questions.
+
+    Returns:
+        Tuple of (source, questions)
+
+    Raises:
+        Source.DoesNotExist: If source not found
+    """
+    source = Source.objects.prefetch_related('questions__answer').get(id=source_id)
+    logger.info(f"Source récupérée: {source.title} (ID: {source_id})")
+
+    questions = source.questions.all()
+    logger.info(f"Questions récupérées: {questions.count()} questions trouvées")
+
+    return source, questions
+
+
+def _initialize_rag_agents(config_path: Path):
+    """
+    Initialize RAG agents (QA and Retriever).
+
+    Returns:
+        Tuple of (agent_qa, agent_retriever)
+
+    Raises:
+        Exception: If initialization fails
+    """
+    logger.info("Initialisation de l'agent QA")
+    agent_qa = QuestionAnswerTool()
+    logger.info("Agent QA initialisé avec succès")
+
+    logger.info(f"Initialisation de l'agent retriever avec config: {config_path}")
+    agent_retriever = DiskStorageRetrieverTool(config_path=config_path)
+    logger.info("Agent retriever initialisé avec succès")
+
+    return agent_qa, agent_retriever
+
+
+def _delete_old_answer(question):
+    """Delete old answer for a question if exists."""
+    try:
+        if hasattr(question, 'answer') and question.answer:
+            old_answer = question.answer
+            logger.info(f"Suppression de l'ancienne réponse pour la question {question.title}")
+            old_answer.documents.clear()
+            old_answer.delete()
+            logger.debug(f"Ancienne réponse supprimée: {old_answer.id}")
+    except Exception as cleanup_error:
+        logger.error(f"Erreur lors du nettoyage de l'ancienne réponse pour {question.title}: {cleanup_error}")
+
+
+def _retrieve_documents(agent_retriever, question_field: str) -> str:
+    """
+    Retrieve documents for a question.
+
+    Returns:
+        JSON string of retrieved documents (empty string if error)
+    """
+    try:
+        logger.info(f"Récupération des documents pour: {question_field}")
+        documents = agent_retriever.forward(question_field)
+
+        # Parse to log document count
+        try:
+            docs_data = json.loads(documents) if documents else {}
+            doc_count = docs_data.get('total_count', 0) if isinstance(docs_data, dict) else 0
+            logger.info(f"Documents récupérés: {doc_count}")
+        except json.JSONDecodeError:
+            logger.info(f"Documents récupérés: JSON invalide (longueur: {len(documents) if documents else 0})")
+
+        return documents or ""
+    except Exception as retrieval_error:
+        logger.error(f"Erreur lors de la récupération des documents: {retrieval_error}")
+        return ""
+
+
+def _generate_answer(agent_qa, question_field: str, documents: str) -> Optional[dict]:
+    """
+    Generate answer for a question using retrieved documents.
+
+    Returns:
+        Parsed answer JSON dict, or None if error
+    """
+    try:
+        logger.info(f"Génération de la réponse pour: {question_field}")
+        answer_data = agent_qa.forward(question_field, documents)
+        logger.info(f"Réponse brute générée: {len(answer_data) if answer_data else 0} caractères")
+
+        if not answer_data:
+            logger.error("Aucune réponse générée")
+            return None
+
+        # Parse JSON
+        answer_json = json.loads(answer_data)
+        logger.info(f"Réponse parsée avec succès: {json.dumps(answer_json, ensure_ascii=False)[:200]}...")
+
+        # Handle list response
+        if isinstance(answer_json, list) and len(answer_json) > 0:
+            answer_json = answer_json[0]
+            logger.info("Réponse extraite de la liste")
+
+        # Validate structure
+        if not isinstance(answer_json, dict):
+            logger.error(f"Réponse invalide: type {type(answer_json)}")
+            return None
+
+        if "answer" not in answer_json:
+            logger.error("Clé 'answer' manquante dans la réponse")
+            return None
+
+        return answer_json
+
+    except json.JSONDecodeError as json_error:
+        logger.error(f"Erreur de parsing JSON: {json_error}")
+        return None
+    except Exception as answer_error:
+        logger.error(f"Erreur lors de la génération de la réponse: {answer_error}")
+        return None
+
+
+def _create_answer_instance(question, answer_json: dict, index: int) -> Optional[Answer]:
+    """
+    Create Answer instance from answer JSON.
+
+    Returns:
+        Created Answer instance, or None if error
+    """
+    try:
+        answer_instance = Answer.objects.create(
+            title=f"Réponse automatique {index+1}",
+            field=answer_json.get("answer", "Aucune réponse générée"),
+            question=question
+        )
+        logger.info(f"Réponse créée avec succès: {answer_instance.id}")
+        return answer_instance
+    except Exception as create_error:
+        logger.error(f"Erreur lors de la création de la réponse pour {question.title}: {create_error}")
+        return None
+
+
+def _create_source_documents(answer_json: dict, answer_instance: Answer, index: int):
+    """Create and associate source documents to answer."""
+    if "sources" not in answer_json or not isinstance(answer_json["sources"], list):
+        logger.info("Aucune source document")
+        return
+
+    source_documents = []
+    for doc in answer_json["sources"]:
+        if not isinstance(doc, dict):
+            logger.warning(f"Document invalide dans les sources: {doc}")
+            continue
+
+        try:
+            doc_instance = Document.objects.create(
+                title=doc.get("title", "Document sans titre"),
+                uid=doc.get("id", f"doc_{index}_{len(source_documents)}"),
+                similarity_score=doc.get("similarity_score", 0.0),
+                url=doc.get("url", ""),
+            )
+            source_documents.append(doc_instance)
+            logger.debug(f"Document créé: {doc_instance.id}")
+        except Exception as doc_create_error:
+            logger.error(f"Erreur lors de la création du document: {doc_create_error}")
+
+    if source_documents:
+        try:
+            answer_instance.documents.set(source_documents)
+            answer_instance.save()
+            logger.info(f"Documents sources associés: {len(source_documents)}")
+        except Exception as assoc_error:
+            logger.error(f"Erreur lors de l'association des documents: {assoc_error}")
+    else:
+        logger.warning("Aucun document source valide")
+
+
+def _process_single_question(question, index: int, total: int, agent_retriever, agent_qa) -> bool:
+    """
+    Process a single question: retrieve documents, generate answer, create instances.
+
+    Returns:
+        True if processing succeeded, False otherwise
+    """
+    try:
+        logger.info(f"Traitement de la question {index+1}/{total}: {question.title}")
+
+        # Delete old answer
+        _delete_old_answer(question)
+
+        # Retrieve documents
+        documents = _retrieve_documents(agent_retriever, question.field)
+        if not documents:
+            logger.warning(f"Aucun document récupéré pour {question.title}")
+
+        # Generate answer
+        answer_json = _generate_answer(agent_qa, question.field, documents)
+        if not answer_json:
+            logger.error(f"Impossible de générer une réponse pour {question.title}")
+            return False
+
+        # Create answer instance
+        answer_instance = _create_answer_instance(question, answer_json, index)
+        if not answer_instance:
+            return False
+
+        # Create and associate source documents
+        _create_source_documents(answer_json, answer_instance, index)
+
+        logger.info(f"Question {question.title} traitée avec succès")
+        return True
+
+    except Exception as e:
+        logger.error(f"Erreur lors du traitement de la question {question.title}: {e}")
+        logger.error(f"Type d'erreur: {type(e).__name__}")
+        logger.error("Traceback complet: ", exc_info=True)
+        return False
+
+
 @dramatiq.actor(
     queue_name="rag_tasks",
     actor_name="rag_app.tasks",
@@ -130,42 +367,35 @@ def create_success_response(source_id: int, config_path: str, processed: int, to
 def launch_qa_process(source_id: int, config_path: str):
     """
     Lance un processus Question/Réponse en utilisant Dramatiq.
-    
+
     Args:
         source_id: ID de la source à analyser
-        config: Configuration pour le processus RAG
+        config_path: Chemin vers le fichier de configuration RAG
+
+    Returns:
+        Dict containing task response with status, processed count, and metadata
     """
     start_time = time.time()
+
     try:
         logger.info("--------------------------------")
         logger.info(f"🚀 Démarrage du processus QA pour la source {source_id}")
-        
-                # Valider le chemin de configuration
-        if not config_path:
-            logger.error("Chemin de configuration manquant")
-            return create_error_response(
-                source_id=source_id,
-                config_path=config_path,
-                error=ValueError("Chemin de configuration manquant"),
-                message="Configuration invalide"
-            )
-        
-        config_path_obj = Path(config_path)
-        if not config_path_obj.exists():
-            logger.error(f"Fichier de configuration introuvable: {config_path}")
-            return create_error_response(
-                source_id=source_id,
-                config_path=config_path,
-                error=FileNotFoundError(f"Fichier de configuration introuvable: {config_path}"),
-                message="Configuration introuvable"
-            )
-        
-        logger.info(f"Configuration validée: {config_path}")
-        
-        # Récupérer la source et ses questions
+
+        # Validate configuration path
         try:
-            source = Source.objects.prefetch_related('questions__answer').get(id=source_id)
-            logger.info(f"Source récupérée: {source.title} (ID: {source_id})")
+            config_path_obj = _validate_config_path(config_path)
+        except (ValueError, FileNotFoundError) as config_error:
+            logger.error(f"Erreur de configuration: {config_error}")
+            return create_error_response(
+                source_id=source_id,
+                config_path=config_path,
+                error=config_error,
+                message="Configuration invalide ou introuvable"
+            )
+
+        # Get source and questions
+        try:
+            source, questions = _get_source_with_questions(source_id)
         except Source.DoesNotExist:
             logger.error(f"Source {source_id} non trouvée")
             return create_error_response(
@@ -175,26 +405,15 @@ def launch_qa_process(source_id: int, config_path: str):
                 message="Source introuvable"
             )
         except Exception as source_error:
-            logger.error(f"Erreur lors de la récupération de la source {source_id}: {source_error}")
+            logger.error(f"Erreur lors de la récupération de la source: {source_error}")
             return create_error_response(
                 source_id=source_id,
                 config_path=config_path,
                 error=source_error,
                 message="Erreur lors de la récupération de la source"
             )
-        
-        try:
-            questions = source.questions.all()
-            logger.info(f"Questions récupérées: {questions.count()} questions trouvées")
-        except Exception as questions_error:
-            logger.error(f"Erreur lors de la récupération des questions pour la source {source_id}: {questions_error}")
-            return create_error_response(
-                source_id=source_id,
-                config_path=config_path,
-                error=questions_error,
-                message="Erreur lors de la récupération des questions"
-            )
-        
+
+        # Check if there are questions to process
         if not questions.exists():
             logger.warning(f"Aucune question trouvée pour la source {source_id}")
             return create_success_response(
@@ -204,194 +423,51 @@ def launch_qa_process(source_id: int, config_path: str):
                 total=0,
                 message="Aucune question à traiter"
             )
-        
-        logger.info(f"Traitement de {questions.count()} questions pour la source {source_id}")
-        
-        # Initialiser les outils RAG
+
+        logger.info(f"Traitement de {questions.count()} questions")
+
+        # Initialize RAG agents
         try:
-            logger.info(f"Initialisation de l'agent QA")
-            agent_qa = QuestionAnswerTool()
-            logger.info(f"Agent QA initialisé avec succès")
-        except Exception as qa_error:
-            logger.error(f"Erreur lors de l'initialisation de l'agent QA: {qa_error}")
+            agent_qa, agent_retriever = _initialize_rag_agents(config_path_obj)
+        except Exception as init_error:
+            logger.error(f"Erreur lors de l'initialisation des agents: {init_error}")
             return create_error_response(
                 source_id=source_id,
                 config_path=config_path,
-                error=qa_error,
+                error=init_error,
                 message="Erreur lors de l'initialisation des outils RAG"
             )
-        
-        try:
-            logger.info(f"Initialisation de l'agent retriever avec config: {config_path}")
-            agent_retriever = DiskStorageRetrieverTool(
-                config_path=config_path_obj
-            )
-            logger.info(f"Agent retriever initialisé avec succès")
-        except Exception as retriever_error:
-            logger.error(f"Erreur lors de l'initialisation de l'agent retriever: {retriever_error}")
-            return create_error_response(
-                source_id=source_id,
-                config_path=config_path,
-                error=retriever_error,
-                message="Erreur lors de l'initialisation des outils RAG"
-            )
-        
+
+        # Process each question
         processed_count = 0
-        
-        # Traiter chaque question
+        total_count = questions.count()
+
         for i, question in enumerate(questions):
-            try:
-                logger.info(f"Traitement de la question {i+1}/{questions.count()}: {question.title}")
-                
-                # Supprimer l'ancienne réponse
-                try:
-                    if hasattr(question, 'answer') and question.answer:
-                        old_answer = question.answer
-                        logger.info(f"Suppression de l'ancienne réponse pour la question {question.title}")
-                        try:
-                            old_answer.documents.clear()
-                            old_answer.delete()
-                            logger.debug(f"Ancienne réponse supprimée: {old_answer.id}")
-                        except Exception as delete_error:
-                            logger.error(f"Erreur lors de la suppression de l'ancienne réponse {old_answer.id}: {delete_error}")
-                            # Continue with deletion
-                except Exception as cleanup_error:
-                    logger.error(f"Erreur lors du nettoyage de l'ancienne réponse pour la question {question.title}: {cleanup_error}")
-                    # Continue with processing
-                
-                # Récupérer les documents pertinents
-                try:
-                    logger.info(f"Récupération des documents pour la question: {question.field}")
-                    documents = agent_retriever.forward(question.field)
-                    
-                    # Parse the JSON to get actual document count
-                    try:
-                        docs_data = json.loads(documents) if documents else {}
-                        doc_count = docs_data.get('total_count', 0) if isinstance(docs_data, dict) else 0
-                        logger.info(f"Documents récupérés: {doc_count} (JSON: {len(documents) if documents else 0} caractères)")
-                    except json.JSONDecodeError:
-                        logger.info(f"Documents récupérés: JSON invalide (longueur: {len(documents) if documents else 0} caractères)")
-                    
-                    if not documents:
-                        logger.warning(f"Aucun document récupéré pour la question {question.title}")
-                        # Continue with empty documents
-                except Exception as retrieval_error:
-                    logger.error(f"Erreur lors de la récupération des documents pour la question {question.title}: {retrieval_error}")
-                    documents = ""
-                    # Continue with empty documents
-                
-                # Générer la réponse
-                try:
-                    logger.info(f"Génération de la réponse pour la question: {question.title}")
-                    answer_data = agent_qa.forward(question.field, documents)
-                    logger.info(f"Réponse brute générée: {len(answer_data) if answer_data else 0} caractères")
-                    
-                    if not answer_data:
-                        logger.error(f"Aucune réponse générée pour la question {question.title}")
-                        continue
-                except Exception as answer_error:
-                    logger.error(f"Erreur lors de la génération de la réponse pour la question {question.title}: {answer_error}")
-                    continue
-                
-                # Parse the answer data
-                try:
-                    answer_json = json.loads(answer_data)
-                    logger.info(f"Réponse parsée avec succès pour la question {question.title} {json.dumps(answer_json, ensure_ascii=False)}")
-                except json.JSONDecodeError as json_error:
-                    logger.error(f"Erreur de parsing JSON pour la question {question.title}: {json_error}")
-                    logger.error(f"Données brutes: {answer_data}")
-                    # Skip this question and continue
-                    continue
-                
-                # Handle case where answer_json is a list containing one dictionary
-                if isinstance(answer_json, list) and len(answer_json) > 0:
-                    answer_json = answer_json[0]
-                    logger.info(f"Réponse extraite de la liste pour la question {question.title}")
-                
-                logger.info(f"Réponse générée pour la question {question.title}: {answer_json.get('answer', '')[:100]}...")
-                
-                # Validate answer structure
-                if not isinstance(answer_json, dict):
-                    logger.error(f"Réponse invalide pour la question {question.title}: {type(answer_json)}")
-                    continue
-                
-                if "answer" not in answer_json:
-                    logger.error(f"Clé 'answer' manquante dans la réponse pour la question {question.title}")
-                    continue
-                
-                # Créer la réponse
-                try:
-                    answer_instance = Answer.objects.create(
-                        title=f"Réponse automatique {i+1}",
-                        field=answer_json.get("answer", "Aucune réponse générée"),
-                        question=question
-                    )
-                    logger.info(f"Réponse créée avec succès: {answer_instance.id}")
-                except Exception as create_error:
-                    logger.error(f"Erreur lors de la création de la réponse pour la question {question.title}: {create_error}")
-                    continue
-                
-                # Créer et associer les documents sources
-                if "sources" in answer_json and isinstance(answer_json["sources"], list):
-                    source_documents = []
-                    for doc in answer_json["sources"]:
-                        if isinstance(doc, dict):
-                            try:
-                                doc_instance = Document.objects.create(
-                                    title=doc.get("title", "Document sans titre"),
-                                    uid=doc.get("id", f"doc_{i}_{len(source_documents)}"),
-                                    similarity_score=doc.get("similarity_score", 0.0),
-                                    url=doc.get("url", ""),
-                                )
-                                source_documents.append(doc_instance)
-                                logger.debug(f"Document créé avec succès: {doc_instance.id}")
-                            except Exception as doc_create_error:
-                                logger.error(f"Erreur lors de la création du document pour la question {question.title}: {doc_create_error}")
-                                continue
-                        else:
-                            logger.warning(f"Document invalide dans les sources: {doc}")
-                    
-                    if source_documents:
-                        try:
-                            answer_instance.documents.set(source_documents)
-                            answer_instance.save()
-                            logger.info(f"Documents sources associés: {len(source_documents)}")
-                        except Exception as assoc_error:
-                            logger.error(f"Erreur lors de l'association des documents pour la question {question.title}: {assoc_error}")
-                            # Continue without documents
-                    else:
-                        logger.warning(f"Aucun document source valide pour la question {question.title}")
-                else:
-                    logger.info(f"Aucune source document pour la question {question.title}")
-                
+            success = _process_single_question(
+                question, i, total_count, agent_retriever, agent_qa
+            )
+            if success:
                 processed_count += 1
-                logger.info(f"Question {question.title} traitée avec succès")
-                
-            except Exception as e:
-                logger.error(f"Erreur lors du traitement de la question {question.title}: {e}")
-                logger.error(f"Type d'erreur: {type(e).__name__}")
-                logger.error(f"Traceback complet: ", exc_info=True)
-                # Continuer avec la question suivante
-                continue
-        
+
+        # Return results
         execution_time = time.time() - start_time
-        logger.info(f"Processus QA terminé pour la source {source_id}. {processed_count} questions traitées.")
-        
+        logger.info(f"Processus QA terminé. {processed_count}/{total_count} questions traitées.")
+
         return create_success_response(
             source_id=source_id,
             config_path=config_path,
             processed=processed_count,
-            total=questions.count(),
-            message=f"Processus QA terminé avec succès. {processed_count} questions traitées.",
+            total=total_count,
+            message=f"Processus QA terminé. {processed_count} questions traitées sur {total_count}.",
             execution_time=execution_time
         )
-        
+
     except Exception as e:
         execution_time = time.time() - start_time
-        logger.error(f"Erreur lors du processus QA pour la source {source_id}: {e}")
+        logger.error(f"Erreur globale lors du processus QA: {e}")
         logger.error(f"Type d'erreur: {type(e).__name__}")
-        logger.error(f"Traceback complet: ", exc_info=True)
-        
+        logger.error("Traceback complet: ", exc_info=True)
+
         return create_error_response(
             source_id=source_id,
             config_path=config_path,

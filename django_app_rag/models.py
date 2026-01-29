@@ -3,7 +3,6 @@ from django.core.files.base import ContentFile
 from pathlib import Path
 import yaml
 import numpy as np
-from pathlib import Path
 from functools import lru_cache
 from django_app_rag.logging import get_logger
 from django_app_rag.app_settings import app_rag_config
