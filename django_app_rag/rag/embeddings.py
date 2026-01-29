@@ -65,10 +65,11 @@ def get_huggingface_embedding_model(
 
     Returns:
         HuggingFaceEmbeddings: A configured HuggingFace embeddings model instance
-            with remote code trust enabled and embedding normalization disabled
+            with remote code trust enabled and embedding normalization enabled
+            for optimal FAISS cosine similarity
     """
     return HuggingFaceEmbeddings(
         model_name=model_id,
         model_kwargs={"device": device, "trust_remote_code": True},
-        encode_kwargs={"normalize_embeddings": False},
+        encode_kwargs={"normalize_embeddings": True},  # Activé pour FAISS
     )
