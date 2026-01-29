@@ -1,4 +1,7 @@
-# Configuration unifiée pour la collecte de données depuis différentes sources
+# Configuration RAG optimisée avec OpenAI text-embedding-3-large
+# Meilleure qualité pour production avec API OpenAI
+# Score MTEB: 64.6 - Multilingue excellent
+
 # Fichiers locaux
 file_paths:
   - "data/input/documents/document1.txt"
@@ -18,30 +21,29 @@ notion_database_ids:
 
 data_dir: "data"
 to_s3: false
-max_workers: 10 
+max_workers: 10
 collection_name: "mixed_collection"
 quality_agent_model_id: "gpt-4o-mini"
 quality_agent_mock: false
 include_notion: true
 include_files: true
-include_urls: true 
+include_urls: true
 
 fetch_limit: 200
 content_quality_score_threshold: 0.6
 retriever_type: parent
 
-# ✨ EMBEDDING MODEL - Alibaba GTE-large (Meilleur open-source CPU-friendly)
-# Pour meilleure qualité, voir: rag_openai_large.yaml ou rag_bge_m3.yaml
-embedding_model_id: Alibaba-NLP/gte-large-en-v1.5  # Ancien: sentence-transformers/all-MiniLM-L6-v2
-embedding_model_type: huggingface
-embedding_model_dim: 1024  # Corrigé: 1536 était incorrect (384 pour MiniLM, 1024 pour GTE)
+# ✨ EMBEDDING MODEL - OpenAI text-embedding-3-large (RECOMMANDÉ)
+embedding_model_id: text-embedding-3-large
+embedding_model_type: openai
+embedding_model_dim: 3072  # Dimension correcte
 
 chunk_size: 640
 contextual_summarization_type: simple
 contextual_agent_model_id: gpt-4o-mini
 contextual_agent_max_characters: 128
 mock: false
-processing_batch_size: 2
-processing_max_workers: 2
-device: cpu # or cuda (for Nvidia GPUs) or mps (for Apple M1/M2/M3 chips)
+processing_batch_size: 4  # Peut augmenter avec API
+processing_max_workers: 4
+device: cpu  # N/A pour OpenAI (API)
 storage_mode: overwrite

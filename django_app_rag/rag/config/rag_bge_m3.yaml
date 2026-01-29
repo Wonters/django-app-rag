@@ -1,4 +1,7 @@
-# Configuration unifiée pour la collecte de données depuis différentes sources
+# Configuration RAG optimisée avec BGE-M3 (Open-source)
+# Meilleure qualité open-source - Nécessite GPU (8GB+ VRAM)
+# Score MTEB: 63.0 - Multilingue (100+ langues)
+
 # Fichiers locaux
 file_paths:
   - "data/input/documents/document1.txt"
@@ -18,30 +21,29 @@ notion_database_ids:
 
 data_dir: "data"
 to_s3: false
-max_workers: 10 
+max_workers: 10
 collection_name: "mixed_collection"
 quality_agent_model_id: "gpt-4o-mini"
 quality_agent_mock: false
 include_notion: true
 include_files: true
-include_urls: true 
+include_urls: true
 
 fetch_limit: 200
 content_quality_score_threshold: 0.6
 retriever_type: parent
 
-# ✨ EMBEDDING MODEL - Alibaba GTE-large (Meilleur open-source CPU-friendly)
-# Pour meilleure qualité, voir: rag_openai_large.yaml ou rag_bge_m3.yaml
-embedding_model_id: Alibaba-NLP/gte-large-en-v1.5  # Ancien: sentence-transformers/all-MiniLM-L6-v2
+# ✨ EMBEDDING MODEL - BGE-M3 (MEILLEUR OPEN-SOURCE)
+embedding_model_id: BAAI/bge-m3
 embedding_model_type: huggingface
-embedding_model_dim: 1024  # Corrigé: 1536 était incorrect (384 pour MiniLM, 1024 pour GTE)
+embedding_model_dim: 1024  # Dimension correcte
 
 chunk_size: 640
 contextual_summarization_type: simple
 contextual_agent_model_id: gpt-4o-mini
 contextual_agent_max_characters: 128
 mock: false
-processing_batch_size: 2
+processing_batch_size: 2  # Ajuster selon GPU
 processing_max_workers: 2
-device: cpu # or cuda (for Nvidia GPUs) or mps (for Apple M1/M2/M3 chips)
+device: cuda  # Ou "mps" pour Apple Silicon M1/M2/M3
 storage_mode: overwrite
