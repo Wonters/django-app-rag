@@ -12,6 +12,7 @@ from langchain_text_splitters import TextSplitter
 from langchain_community.vectorstores import FAISS
 from langchain_core.callbacks import CallbackManagerForRetrieverRun
 from langchain.retrievers.multi_vector import SearchType
+from django_app_rag.rag.infrastructur.faiss.persistent_store import SQLiteDocStore
 
 logger = get_logger_loguru(__name__)
 
@@ -55,9 +56,14 @@ class FaissParentDocumentRetriever(ParentDocumentRetriever):
             )
 
 
+        # Initialize persistent docstore using SQLite
+        docstore_path = persistent_path / "parent_docstore.db"
+        docstore = SQLiteDocStore(str(docstore_path))
+        logger.info(f"Using persistent SQLiteDocStore at {docstore_path}")
+
         super().__init__(
             vectorstore=vectorstore,
-            docstore=InMemoryStore(),#todo: use MongoDBStore to save documents on Mongo
+            docstore=docstore,
             child_splitter=child_splitter,
             parent_splitter=parent_splitter,
             search_kwargs=search_kwargs or {},

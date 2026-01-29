@@ -20,6 +20,6 @@ sentence-transformers==5.1.0
 tesserocr>=0.1.8
 docling>=2.44.0
 pytest-django>=4.5.2
-# torch==2.4.1  # Temporarily disabled due to I/O issues
-# torchvision==0.19.1  # Temporarily disabled due to I/O issues
+torch==2.4.1
+torchvision==0.19.1
 

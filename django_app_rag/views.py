@@ -177,36 +177,64 @@ class SourceFormView(FormView):
         return self.render_to_response(self.get_context_data(form=form))
         
 
-    def post(self, request, *args, **kwargs):
-        """
-        #todo: revoir cette méthode, c'est pas propre
-        Post the form.
-        Source form is done in two steps:
-        - First step: get the form and select type of source, it returns the form with 
-        the type of source selected and specific fields according to the type of source
-        - Second step: post the form
-        """
-        # On récupère le type sélectionné
-        selected_type = request.POST.get('type')
-        form = self.get_form()
-        # On vérifie si le champ spécifique est rempli
-        specific_field = self.form_class.fields_map.get(selected_type)
-        logger.info(f"specific_field: {specific_field}")
+    def _is_editing(self):
+        """Check if we are in edit mode."""
+        return self.request.path.endswith('edit/')
 
-        if not specific_field or not request.POST.get(specific_field) and not request.FILES.get(specific_field):
-            if request.path.endswith('edit/'):
-                pass
-            else:
-                logger.warning(f"Form is invalid: POST {request.POST} FILES {request.FILES}")
-                # Si le champ spécifique n'est pas encore rempli, on réaffiche le formulaire avec le champ spécifique
-                return self.render_to_response(self.get_context_data(form=form))
-        # Sinon, on valide et sauvegarde
+    def _is_step_one(self, selected_type):
+        """
+        Check if we are at step one of the form submission.
+        Step one is when the user selects the type but hasn't filled the specific field yet.
+        """
+        if not selected_type:
+            return True
+
+        specific_field = self.form_class.fields_map.get(selected_type)
+        if not specific_field:
+            return True
+
+        # Check if the specific field is filled (in POST data or FILES)
+        has_post_data = bool(self.request.POST.get(specific_field))
+        has_file_data = bool(self.request.FILES.get(specific_field))
+
+        return not (has_post_data or has_file_data)
+
+    def _handle_step_one(self, form):
+        """Handle step one: display form with type-specific fields."""
+        logger.warning(f"Step 1: Showing type-specific fields. POST: {self.request.POST}, FILES: {self.request.FILES}")
+        return self.render_to_response(self.get_context_data(form=form))
+
+    def _handle_step_two(self, form):
+        """Handle step two: validate and save the form."""
         if form.is_valid():
             logger.info(f"Form is valid: {form.cleaned_data}")
             form.save()
             return self.form_valid(form)
+
         logger.info(f"Form is invalid: {form.errors}")
         return self.form_invalid(form)
+
+    def post(self, request, *args, **kwargs):
+        """
+        Post the form.
+        Source form is done in two steps:
+        - Step 1: User selects source type, form displays type-specific fields
+        - Step 2: User fills type-specific fields and submits
+        """
+        selected_type = request.POST.get('type')
+        form = self.get_form()
+
+        logger.info(f"Processing form submission for type: {selected_type}")
+
+        # In edit mode, skip step-one validation and go directly to save
+        if self._is_editing():
+            return self._handle_step_two(form)
+
+        # For creation, check if we're at step one or step two
+        if self._is_step_one(selected_type):
+            return self._handle_step_one(form)
+
+        return self._handle_step_two(form)
     
 
     def delete(self, request, *args, **kwargs):
