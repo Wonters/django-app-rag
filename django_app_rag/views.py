@@ -573,5 +573,43 @@ class DocumentTextView(APIView):
             "document_data": document_data,
             "question_id": question_id
         })
-            
+
+
+class HealthCheckView(APIView):
+    """
+    Health check endpoint for monitoring and CI/CD
+    """
+    authentication_classes = []
+    permission_classes = []
+
+    def get(self, request, *args, **kwargs):
+        """
+        Health check endpoint returning service status
+        """
+        import sys
+        from django.db import connection
+
+        health_status = {
+            "status": "healthy",
+            "version": getattr(settings, 'VERSION', '0.1.0'),
+            "python_version": f"{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}",
+            "checks": {}
+        }
+
+        # Check database connection
+        try:
+            connection.ensure_connection()
+            health_status["checks"]["database"] = "ok"
+        except Exception as e:
+            health_status["checks"]["database"] = f"error: {str(e)}"
+            health_status["status"] = "unhealthy"
+
+        # Check if RAG features are enabled
+        health_status["checks"]["rag_enabled"] = getattr(settings, 'ENABLE_RAG_FEATURES', True)
+
+        # Return appropriate status code
+        status_code = status.HTTP_200_OK if health_status["status"] == "healthy" else status.HTTP_503_SERVICE_UNAVAILABLE
+
+        return Response(health_status, status=status_code)
+
 
