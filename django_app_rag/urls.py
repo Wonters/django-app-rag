@@ -1,6 +1,6 @@
 from django.urls import path, include
-from .views import (MainRAGTemplateView, CollectionsModelViewSet, SourceFormView, SourceModelViewSet, 
- QuestionFormView, QuestionModelViewSet, CollectionFormTemplateView, ETLTaskView, LaunchQAView, ChunkTextView, DocumentTextView)
+from .views import (MainRAGTemplateView, CollectionsModelViewSet, SourceFormView, SourceModelViewSet,
+ QuestionFormView, QuestionModelViewSet, CollectionFormTemplateView, ETLTaskView, LaunchQAView, ChunkTextView, DocumentTextView, HealthCheckView)
 from rest_framework.routers import DefaultRouter
 
 app_name = 'django_app_rag'
@@ -12,6 +12,7 @@ router.register(r'questions', QuestionModelViewSet, basename='questions')
 
 urlpatterns = [
     path('', MainRAGTemplateView.as_view(), name='main-rag-front'),
+    path('health', HealthCheckView.as_view(), name='health-check'),
     path('source/add/', SourceFormView.as_view(), name='source-add'),
     path('source/<str:pk>/edit/', SourceFormView.as_view(), name='source-edit'),
     path('source/<str:pk>/delete/', SourceFormView.as_view(), name='source-delete'),
