@@ -1,4 +1,5 @@
 import os.path
+from contextlib import contextmanager
 from pathlib import Path
 from django_app_rag.logging import get_logger_loguru
 import faiss
@@ -17,9 +18,16 @@ from django_app_rag.path_utils import ensure_path, ensure_str, safe_join
 
 logger = get_logger_loguru(__name__)
 
+
 class FaissParentDocumentRetriever(ParentDocumentRetriever):
-    """Un ParentDocumentRetriever qui utilise FAISS en back-end."""
-    # docstore: InMemoryStore
+    """Un ParentDocumentRetriever qui utilise FAISS en back-end.
+
+    Améliorations par rapport à la version de base :
+    - context manager batch_indexing() pour bufferiser les writes FAISS
+    - Reranking optionnel via CrossEncoder (sentence-transformers)
+    - Retrieval hybride optionnel : dense (FAISS) + sparse (BM25) avec fusion RRF
+    - Logging réduit au niveau DEBUG pour les diagnostics verbeux
+    """
 
     def __init__(
         self,
@@ -29,23 +37,26 @@ class FaissParentDocumentRetriever(ParentDocumentRetriever):
         index_factory_str: str = "Flat",
         normalize_L2: bool = True,
         search_kwargs: Optional[Dict[str, Any]] = None,
-        persistent_path:str ="data/",
+        persistent_path: str = "data/",
         similarity_score_threshold: float = 0.5,
+        reranker_model_id: Optional[str] = None,
+        use_hybrid_retrieval: bool = False,
     ):
         persistent_path = safe_join(ensure_path(persistent_path), "faiss_store")
         # VectorStore FAISS instanciation
         if os.path.exists(persistent_path):
-            vectorstore = FAISS.load_local(ensure_str(persistent_path),
-                             embeddings=embedding_model,
-                             index_name="index",
-                             allow_dangerous_deserialization=True)
+            vectorstore = FAISS.load_local(
+                ensure_str(persistent_path),
+                embeddings=embedding_model,
+                index_name="index",
+                allow_dangerous_deserialization=True,
+            )
             logger.info(f"Vectorstore loaded from {persistent_path}")
         else:
-            # Find dimension encoding dummy
+            # Find dimension by encoding a dummy vector
             dummy_vec = embedding_model.embed_query(" ")
             dim = len(dummy_vec)
 
-            # Empty faiss index, no normalization L2 to apply
             index = faiss.index_factory(dim, index_factory_str, faiss.METRIC_INNER_PRODUCT)
             vectorstore = FAISS(
                 embedding_function=embedding_model,
@@ -55,7 +66,6 @@ class FaissParentDocumentRetriever(ParentDocumentRetriever):
                 relevance_score_fn=None,
                 normalize_L2=normalize_L2,
             )
-
 
         # Initialize persistent docstore using SQLite
         docstore_path = safe_join(persistent_path, "parent_docstore.db")
@@ -71,8 +81,36 @@ class FaissParentDocumentRetriever(ParentDocumentRetriever):
         )
         self._persistent_path = persistent_path
         self._similarity_score_threshold = similarity_score_threshold
+        self._reranker_model_id = reranker_model_id
+        self._use_hybrid = use_hybrid_retrieval
+        # Mutable runtime state (not Pydantic fields)
+        self._batch_mode = False
+        self._reranker_instance = None
+        self._bm25_instance = None
+
         if self._similarity_score_threshold is not None:
             self.search_type = SearchType.similarity_score_threshold
+
+    @contextmanager
+    def batch_indexing(self):
+        """Context manager pour bufferiser les writes FAISS.
+
+        Permet d'ajouter des milliers de documents sans écrire sur disque
+        à chaque batch, puis de sauvegarder une seule fois à la fin.
+
+        Usage:
+            with retriever.batch_indexing():
+                for batch in document_batches:
+                    retriever.add_documents(batch)
+            # save_local() est appelé ici, une seule fois
+        """
+        self._batch_mode = True
+        try:
+            yield self
+        finally:
+            self._batch_mode = False
+            logger.info(f"Batch indexing complete, saving vectorstore to {self._persistent_path}")
+            self.vectorstore.save_local(self._persistent_path)
 
     @classmethod
     def from_documents(
@@ -97,8 +135,6 @@ class FaissParentDocumentRetriever(ParentDocumentRetriever):
             normalize_L2=normalize_L2,
             search_kwargs=search_kwargs,
         )
-        # Cette méthode split automatiquement vos docs en parents/enfants,
-        # index les enfants dans FAISS et stock les parents dans le docstore.
         retriever.add_documents(documents)
         return retriever
 
@@ -114,22 +150,15 @@ class FaissParentDocumentRetriever(ParentDocumentRetriever):
         normalize_L2: bool = True,
         search_kwargs: Optional[Dict[str, Any]] = None,
     ) -> "FaissParentDocumentRetriever":
-        """
-        Usine à retriever : construit des Documents à partir de `texts` et `metadatas`,
-        puis délègue à from_documents.
-        """
-        # Validation des métadonnées
         if metadatas is not None and len(metadatas) != len(texts):
             raise ValueError(
                 f"Le nombre de metadatas ({len(metadatas)}) ne correspond "
                 f"pas au nombre de textes ({len(texts)})"
             )
-        # Création des Document
         docs: List[Document] = []
         for i, txt in enumerate(texts):
             meta = metadatas[i] if metadatas else {}
             docs.append(Document(page_content=txt, metadata=meta))
-        # Délégation à from_documents
         return cls.from_documents(
             documents=docs,
             embedding=embedding,
@@ -141,311 +170,267 @@ class FaissParentDocumentRetriever(ParentDocumentRetriever):
         )
 
     def add_documents(
-            self,
-            documents: list[Document],
-            ids: Optional[list[str]] = None,
-            add_to_docstore: bool = True,
-            **kwargs: Any,
+        self,
+        documents: list[Document],
+        ids: Optional[list[str]] = None,
+        add_to_docstore: bool = True,
+        **kwargs: Any,
     ) -> None:
-        logger.info(f"Adding documents to vectorstore")
-        
-        # Vérifier les IDs avant l'ajout
-        self._validate_document_ids(documents)
-        
-        # Vérifier si le batch n'est pas déjà indexé
-        self._validate_batch_not_already_indexed(documents)
-        
-        # Embed documents and add to vectorstore
-        super().add_documents(documents, ids, add_to_docstore, **kwargs)
-        # Save vectorstore on disk to persistency
-        # Avoid compute embeddings every time
-        logger.info(f"Saving vectorstore to {self._persistent_path}")
-        self.vectorstore.save_local(self._persistent_path)
+        logger.info(f"Adding {len(documents)} documents to vectorstore")
 
-    def _validate_document_ids(self, documents: list[Document]):
-        """
-        Valide que tous les documents ont des IDs uniques.
-        """
-        logger.info(f"🔍 Validation des IDs pour {len(documents)} documents")
-        
-        # Collecter tous les IDs
-        all_ids = []
-        for doc in documents:
-            doc_id = doc.metadata.get("id", "unknown")
-            all_ids.append(doc_id)
-        
-        # Vérifier les doublons
-        unique_ids = set(all_ids)
-        duplicate_count = len(all_ids) - len(unique_ids)
-        
-        if duplicate_count > 0:
-            logger.error(f"🚨 DOUBLONS DÉTECTÉS DANS LES DOCUMENTS À INDEXER: {duplicate_count} IDs dupliqués!")
-            
-            # Trouver les IDs dupliqués
-            from collections import Counter
-            id_counts = Counter(all_ids)
-            duplicates = {id_: count for id_, count in id_counts.items() if count > 1}
-            
-            for id_, count in duplicates.items():
-                logger.error(f"   - ID '{id_}' apparaît {count} fois")
-                
-                # Afficher les contenus des chunks dupliqués
-                duplicate_docs = [doc for doc in documents if doc.metadata.get("id") == id_]
-                for i, doc in enumerate(duplicate_docs):
-                    content_preview = doc.page_content[:100] + "..." if len(doc.page_content) > 100 else doc.page_content
-                    logger.error(f"     Chunk {i+1}: '{content_preview}'")
+        self._validate_document_ids(documents)
+        self._validate_batch_not_already_indexed(documents)
+
+        super().add_documents(documents, ids, add_to_docstore, **kwargs)
+
+        # Invalidate BM25 index so it's rebuilt on next hybrid search
+        self._bm25_instance = None
+
+        # T2: Only write to disk when not in batch mode.
+        # Use batch_indexing() context manager to defer the save during bulk indexing.
+        if not self._batch_mode:
+            logger.info(f"Saving vectorstore to {self._persistent_path}")
+            self.vectorstore.save_local(self._persistent_path)
         else:
-            logger.info("✅ Tous les documents ont des IDs uniques")
-        
-        # Vérifier que tous les documents ont un ID
+            logger.debug("Batch mode active: deferring vectorstore save")
+
+    def _validate_document_ids(self, documents: list[Document]) -> None:
+        """Valide que tous les documents ont des IDs uniques (logs en DEBUG)."""
+        from collections import Counter
+
+        all_ids = [doc.metadata.get("id", "unknown") for doc in documents]
+        id_counts = Counter(all_ids)
+        duplicates = {id_: count for id_, count in id_counts.items() if count > 1}
+
+        if duplicates:
+            logger.warning(f"Duplicate IDs detected in batch: {list(duplicates.keys())}")
+
         docs_without_id = [doc for doc in documents if not doc.metadata.get("id")]
         if docs_without_id:
-            logger.warning(f"⚠️  {len(docs_without_id)} documents sans ID détectés")
-        else:
-            logger.info("✅ Tous les documents ont un ID")
+            logger.warning(f"{len(docs_without_id)} documents have no ID")
 
-    def _validate_batch_not_already_indexed(self, documents: list[Document]):
-        """
-        Valide que le batch de documents n'est pas déjà indexé dans le vectorstore.
-        """
-        logger.info(f"🔍 Validation que le batch n'est pas déjà indexé pour {len(documents)} documents")
-        
-        # Collecter tous les IDs du batch
-        batch_ids = set()
-        for doc in documents:
-            doc_id = doc.metadata.get("id")
-            if doc_id:
-                batch_ids.add(doc_id)
-        
+        logger.debug(
+            f"ID validation: {len(documents)} docs, "
+            f"{len(duplicates)} duplicate IDs, {len(docs_without_id)} missing IDs"
+        )
+
+    def _validate_batch_not_already_indexed(self, documents: list[Document]) -> None:
+        """Avertit si des documents du batch sont déjà dans l'index."""
+        batch_ids = {doc.metadata.get("id") for doc in documents if doc.metadata.get("id")}
         if not batch_ids:
-            logger.warning("⚠️  Aucun ID trouvé dans le batch, impossible de vérifier l'indexation")
             return
-        
-        # Vérifier quels IDs sont déjà dans l'index
-        already_indexed_ids = set()
-        
-        # Parcourir le mapping index_to_docstore_id pour trouver les IDs déjà présents
-        if hasattr(self.vectorstore, 'index_to_docstore_id'):
+
+        if hasattr(self.vectorstore, "index_to_docstore_id"):
             existing_ids = set(self.vectorstore.index_to_docstore_id.values())
-            already_indexed_ids = batch_ids.intersection(existing_ids)
-        
-        if already_indexed_ids:
-            logger.error(f"🚨 BATCH DÉJÀ INDEXÉ DÉTECTÉ: {len(already_indexed_ids)} documents déjà présents dans l'index!")
-            
-            for doc_id in already_indexed_ids:
-                logger.error(f"   - ID '{doc_id}' est déjà indexé")
-                
-                # Afficher le contenu du document déjà indexé
-                duplicate_docs = [doc for doc in documents if doc.metadata.get("id") == doc_id]
-                for i, doc in enumerate(duplicate_docs):
-                    content_preview = doc.page_content[:100] + "..." if len(doc.page_content) > 100 else doc.page_content
-                    logger.error(f"     Document {i+1}: '{content_preview}'")
-            
-            # Calculer le pourcentage de documents déjà indexés
-            percentage = (len(already_indexed_ids) / len(batch_ids)) * 100
-            logger.error(f"📊 {percentage:.1f}% du batch est déjà indexé ({len(already_indexed_ids)}/{len(batch_ids)})")
-            
-            # Recommander une action
-            if percentage >= 80:
-                logger.error("🚨 RECOMMANDATION: Le batch semble être majoritairement déjà indexé. Vérifiez la logique d'indexation.")
-            elif percentage >= 50:
-                logger.warning("⚠️  RECOMMANDATION: Plus de la moitié du batch est déjà indexé. Vérifiez la logique d'indexation.")
+            already_indexed = batch_ids.intersection(existing_ids)
+            if already_indexed:
+                pct = (len(already_indexed) / len(batch_ids)) * 100
+                logger.warning(
+                    f"{len(already_indexed)}/{len(batch_ids)} documents ({pct:.0f}%) "
+                    f"already indexed - possible duplicate indexing"
+                )
             else:
-                logger.info("ℹ️  RECOMMANDATION: Quelques documents sont déjà indexés, mais le batch semble principalement nouveau.")
-        else:
-            logger.info("✅ Aucun document du batch n'est déjà indexé")
-        
-        # Vérifier les IDs uniques du batch qui seront ajoutés
-        new_ids = batch_ids - already_indexed_ids
-        if new_ids:
-            logger.info(f"✅ {len(new_ids)} nouveaux documents seront ajoutés à l'index")
-        else:
-            logger.warning("⚠️  Aucun nouveau document à ajouter - tous les documents du batch sont déjà indexés")
+                logger.debug(f"Batch of {len(batch_ids)} documents: no duplicates found")
 
     def _get_relevant_documents(
         self, query: str, *, run_manager: CallbackManagerForRetrieverRun
     ) -> list[Document]:
         """Get documents relevant to a query.
-        Args:
-            query: String to find relevant documents for
-            run_manager: The callbacks manager to use
-        Returns:
-            List of relevant documents
+
+        T3: diagnose_index() n'est plus appelé automatiquement à chaque requête.
+        Pour diagnostiquer l'index, appelez manuellement retriever.diagnose_index().
         """
-        # Diagnostic de l'index au début de la recherche
-        self.diagnose_index()
-        
+        if self._use_hybrid:
+            return self._hybrid_search(query)
+        return self._dense_search(query)
+
+    def _dense_search(self, query: str) -> list[Document]:
+        """Recherche dense FAISS avec filtrage par score et reranking optionnel."""
         if self.search_type == SearchType.mmr:
             sub_docs = self.vectorstore.max_marginal_relevance_search(
                 query, **self.search_kwargs
             )
         elif self.search_type == SearchType.similarity_score_threshold:
-            sub_docs_and_similarities = (
-                self.vectorstore.similarity_search_with_relevance_scores(
-                    query, **self.search_kwargs
-                )
+            sub_docs_and_similarities = self.vectorstore.similarity_search_with_relevance_scores(
+                query, **self.search_kwargs
             )
-            
-            # Logging pour diagnostiquer le problème de duplication
-            logger.info(f"Recherche FAISS retourne {len(sub_docs_and_similarities)} résultats")
-            
-            # Analyser les résultats pour détecter les doublons
-            chunk_ids_seen = set()
-            duplicate_chunks = []
-            
-            for doc, score in sub_docs_and_similarities:
-                chunk_id = doc.metadata.get("id", "unknown")
-                if chunk_id in chunk_ids_seen:
-                    duplicate_chunks.append((chunk_id, score))
-                    logger.warning(f"⚠️  CHUNK DUPLIQUÉ DÉTECTÉ: ID {chunk_id} avec score {score}")
-                else:
-                    chunk_ids_seen.add(chunk_id)
-                    logger.info(f"✅ Chunk unique: ID {chunk_id} avec score {score}")
-            
-            if duplicate_chunks:
-                logger.error(f"🚨 {len(duplicate_chunks)} chunks dupliqués détectés dans les résultats FAISS!")
-                for chunk_id, score in duplicate_chunks:
-                    logger.error(f"   - ID: {chunk_id}, Score: {score}")
-            
-            # Filter documents with similarity score > threshold and add score to metadata
-            filtered_docs = []
+            logger.debug(f"FAISS returned {len(sub_docs_and_similarities)} candidates")
+
+            sub_docs = []
             for doc, score in sub_docs_and_similarities:
                 if score > self._similarity_score_threshold:
-                    # Create a copy of the document with score in metadata
                     doc.metadata["similarity_score"] = score
-                    filtered_docs.append(doc)
-            sub_docs = filtered_docs
+                    sub_docs.append(doc)
         else:
             sub_docs = self.vectorstore.similarity_search(query, **self.search_kwargs)
-        
-        # Grouper les chunks par contenu similaire pour éviter la duplication
-        grouped_docs = self._group_similar_chunks(sub_docs)
-        
-        return grouped_docs
+
+        unique_docs = self._group_similar_chunks(sub_docs)
+
+        # T5: Reranking optionnel via CrossEncoder
+        if self._reranker_model_id and unique_docs:
+            unique_docs = self._rerank(query, unique_docs)
+
+        logger.info(f"Dense search: {len(unique_docs)} unique docs for query '{query[:60]}'")
+        return unique_docs
+
+    def _hybrid_search(self, query: str) -> list[Document]:
+        """T6: Retrieval hybride FAISS + BM25 avec fusion RRF.
+
+        Combine la recherche dense (embeddings) et la recherche sparse (BM25)
+        pour améliorer le recall sur les termes techniques exacts.
+        """
+        dense_docs = self._dense_search(query)
+        sparse_docs = self._bm25_search(query)
+
+        logger.debug(
+            f"Hybrid search: {len(dense_docs)} dense + {len(sparse_docs)} sparse docs"
+        )
+
+        merged = self._rrf_merge(dense_docs, sparse_docs)
+
+        k = self.search_kwargs.get("k", 5)
+        result = merged[:k]
+
+        logger.info(f"Hybrid search: {len(result)} docs returned after RRF fusion")
+        return result
+
+    def _bm25_search(self, query: str) -> list[Document]:
+        """Recherche BM25 sur les child documents du docstore FAISS (InMemoryDocstore)."""
+        from langchain_community.retrievers import BM25Retriever
+
+        if self._bm25_instance is None:
+            child_docs = list(self.vectorstore.docstore._dict.values())
+            if not child_docs:
+                logger.debug("BM25: no child documents available in FAISS docstore")
+                return []
+            k = self.search_kwargs.get("k", 5)
+            self._bm25_instance = BM25Retriever.from_documents(child_docs, k=k)
+            logger.debug(f"BM25 index built from {len(child_docs)} child documents")
+
+        try:
+            return self._bm25_instance.invoke(query)
+        except Exception as e:
+            logger.warning(f"BM25 search failed, falling back to dense only: {e}")
+            return []
+
+    def _rrf_merge(
+        self,
+        dense_docs: list[Document],
+        sparse_docs: list[Document],
+        rrf_k: int = 60,
+    ) -> list[Document]:
+        """Reciprocal Rank Fusion : fusionne les résultats dense et sparse.
+
+        Score RRF = sum(1 / (k + rank)) pour chaque retriever.
+        Un document dans les deux listes obtient un score plus élevé.
+        """
+        scores: dict[int, float] = {}
+        doc_map: dict[int, Document] = {}
+
+        for rank, doc in enumerate(dense_docs):
+            key = hash(doc.page_content.strip())
+            scores[key] = scores.get(key, 0.0) + 1.0 / (rrf_k + rank + 1)
+            doc_map[key] = doc
+
+        for rank, doc in enumerate(sparse_docs):
+            key = hash(doc.page_content.strip())
+            scores[key] = scores.get(key, 0.0) + 1.0 / (rrf_k + rank + 1)
+            if key not in doc_map:
+                doc_map[key] = doc
+
+        sorted_keys = sorted(scores, key=lambda x: scores[x], reverse=True)
+        return [doc_map[k] for k in sorted_keys]
+
+    def _rerank(self, query: str, docs: list[Document]) -> list[Document]:
+        """T5: Reranking des documents via CrossEncoder (sentence-transformers).
+
+        Améliore la précision en reclassant les candidats récupérés
+        avant de les envoyer au LLM.
+        """
+        if not docs or not self._reranker_model_id:
+            return docs
+
+        try:
+            if self._reranker_instance is None:
+                from sentence_transformers import CrossEncoder
+
+                self._reranker_instance = CrossEncoder(self._reranker_model_id)
+                logger.info(f"CrossEncoder reranker loaded: {self._reranker_model_id}")
+
+            pairs = [(query, doc.page_content) for doc in docs]
+            scores = self._reranker_instance.predict(pairs)
+
+            ranked = sorted(zip(scores, docs), key=lambda x: float(x[0]), reverse=True)
+            for score, doc in ranked:
+                doc.metadata["rerank_score"] = float(score)
+
+            logger.debug(f"Reranked {len(docs)} documents")
+            return [doc for _, doc in ranked]
+
+        except Exception as e:
+            logger.warning(f"Reranking failed, returning original order: {e}")
+            return docs
 
     def _group_similar_chunks(self, chunks: list[Document]) -> list[Document]:
-        """
-        Groupe les chunks par contenu similaire pour éviter la duplication.
-        Utilise une approche basée sur la similarité du contenu plutôt que sur les IDs.
-        """
+        """Déduplique les chunks par hash de contenu et par ID."""
         if not chunks:
             return []
-        
-        logger.info(f"🔍 Début du groupement de {len(chunks)} chunks")
-        
-        # Trier par score décroissant
+
         chunks.sort(key=lambda x: x.metadata.get("similarity_score", 0), reverse=True)
-        
-        # Logging détaillé de chaque chunk avant groupement
-        for i, chunk in enumerate(chunks):
-            chunk_id = chunk.metadata.get("id", "unknown")
-            score = chunk.metadata.get("similarity_score", "unknown")
-            content_preview = chunk.page_content[:50] + "..." if len(chunk.page_content) > 50 else chunk.page_content
-            logger.info(f"   Chunk {i+1}: ID={chunk_id}, Score={score}, Contenu='{content_preview}'")
-        
-        grouped_chunks = []
-        used_content_hashes = set()
-        used_chunk_ids = set()
-        
+
+        unique: list[Document] = []
+        seen_ids: set = set()
+        seen_hashes: set = set()
+
         for chunk in chunks:
             chunk_id = chunk.metadata.get("id", "unknown")
             content_hash = hash(chunk.page_content.strip())
-            
-            logger.info(f"🔍 Traitement du chunk ID={chunk_id}, Hash={content_hash}")
-            
-            # Vérifier si on a déjà vu ce chunk ID
-            if chunk_id in used_chunk_ids:
-                logger.warning(f"⚠️  Chunk ID déjà vu: {chunk_id}")
-                chunk.metadata.update({
-                    "is_unique_chunk": False,
-                    "content_hash": content_hash,
-                    "duplicate_of": f"Chunk ID {chunk_id} déjà présent",
-                    "duplicate_type": "id_duplicate"
-                })
-                continue
-            
-            # Vérifier si on a déjà vu ce contenu
-            if content_hash in used_content_hashes:
-                logger.warning(f"⚠️  Contenu déjà vu pour le chunk ID: {chunk_id}")
-                chunk.metadata.update({
-                    "is_unique_chunk": False,
-                    "content_hash": content_hash,
-                    "duplicate_of": "Contenu identique déjà présent",
-                    "duplicate_type": "content_duplicate"
-                })
-                continue
-            
-            # Chunk unique
-            used_content_hashes.add(content_hash)
-            used_chunk_ids.add(chunk_id)
-            
-            # Enrichir les métadonnées avec des informations utiles
-            chunk.metadata.update({
-                "is_unique_chunk": True,
-                "content_hash": content_hash,
-                "chunk_length": len(chunk.page_content),
-                "chunk_preview": chunk.page_content[:100] + "..." if len(chunk.page_content) > 100 else chunk.page_content
-            })
-            
-            grouped_chunks.append(chunk)
-            logger.info(f"✅ Chunk {chunk_id} ajouté au groupe (unique)")
-        
-        logger.info(f"🎯 Groupement terminé: {len(chunks)} chunks → {len(grouped_chunks)} chunks uniques")
-        return grouped_chunks
 
-    def diagnose_index(self):
+            if chunk_id in seen_ids or content_hash in seen_hashes:
+                logger.debug(f"Duplicate chunk skipped: ID={chunk_id}")
+                continue
+
+            seen_ids.add(chunk_id)
+            seen_hashes.add(content_hash)
+            chunk.metadata["is_unique_chunk"] = True
+            unique.append(chunk)
+
+        logger.debug(f"Dedup: {len(chunks)} -> {len(unique)} unique chunks")
+        return unique
+
+    def diagnose_index(self) -> None:
+        """Diagnostic de l'index FAISS.
+
+        Méthode utilitaire pour le debugging manuel.
+        N'est plus appelée automatiquement à chaque requête (T3).
+
+        Usage: retriever.diagnose_index()
         """
-        Méthode de diagnostic pour examiner l'index FAISS et détecter les problèmes.
-        """
-        logger.info("🔍 === DIAGNOSTIC DE L'INDEX FAISS ===")
-        
         try:
-            # Informations sur l'index FAISS
             faiss_index = self.vectorstore.index
-            logger.info(f"📊 Type d'index FAISS: {type(faiss_index)}")
-            logger.info(f"📊 Nombre total de vecteurs: {faiss_index.ntotal}")
-            logger.info(f"📊 Dimension des vecteurs: {faiss_index.d}")
-            
-            # Informations sur le mapping
             index_to_docstore_id = self.vectorstore.index_to_docstore_id
-            logger.info(f"📊 Nombre d'entrées dans le mapping: {len(index_to_docstore_id)}")
-            
-            # Vérifier les doublons dans le mapping
             docstore_ids = list(index_to_docstore_id.values())
-            unique_ids = set(docstore_ids)
-            duplicate_count = len(docstore_ids) - len(unique_ids)
-            
+            duplicate_count = len(docstore_ids) - len(set(docstore_ids))
+
+            logger.info(
+                f"FAISS index diagnostic: ntotal={faiss_index.ntotal}, "
+                f"dim={faiss_index.d}, mapping_entries={len(index_to_docstore_id)}, "
+                f"duplicates={duplicate_count}"
+            )
+
+            if hasattr(self.vectorstore, "docstore") and hasattr(
+                self.vectorstore.docstore, "_dict"
+            ):
+                logger.info(
+                    f"FAISS child docstore: {len(self.vectorstore.docstore._dict)} documents"
+                )
+
             if duplicate_count > 0:
-                logger.error(f"🚨 DOUBLONS DÉTECTÉS DANS LE MAPPING: {duplicate_count} entrées dupliquées!")
-                
-                # Trouver les IDs dupliqués
                 from collections import Counter
+
                 id_counts = Counter(docstore_ids)
-                duplicates = {id_: count for id_, count in id_counts.items() if count > 1}
-                
-                for id_, count in duplicates.items():
-                    logger.error(f"   - ID '{id_}' apparaît {count} fois")
-            else:
-                logger.info("✅ Aucun doublon détecté dans le mapping")
-            
-            # Informations sur le docstore
-            if hasattr(self.vectorstore, 'docstore'):
-                docstore = self.vectorstore.docstore
-                if hasattr(docstore, '_dict'):
-                    logger.info(f"📊 Nombre de documents dans le docstore: {len(docstore._dict)}")
-                    
-                    # Vérifier les doublons dans le docstore
-                    docstore_ids = list(docstore._dict.keys())
-                    unique_docstore_ids = set(docstore_ids)
-                    docstore_duplicate_count = len(docstore_ids) - len(unique_docstore_ids)
-                    
-                    if docstore_duplicate_count > 0:
-                        logger.error(f"🚨 DOUBLONS DÉTECTÉS DANS LE DOCSTORE: {docstore_duplicate_count} entrées dupliquées!")
-                    else:
-                        logger.info("✅ Aucun doublon détecté dans le docstore")
-            
-            logger.info("🔍 === FIN DU DIAGNOSTIC ===")
-            
+                dupes = {id_: c for id_, c in id_counts.items() if c > 1}
+                logger.warning(f"Duplicate IDs in FAISS mapping: {dupes}")
+
         except Exception as e:
-            logger.error(f"❌ Erreur lors du diagnostic: {e}")
-            logger.opt(exception=True).error("Détails de l'erreur:")
+            logger.error(f"Index diagnosis failed: {e}")

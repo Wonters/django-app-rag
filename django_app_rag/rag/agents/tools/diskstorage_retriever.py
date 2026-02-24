@@ -57,10 +57,17 @@ class DiskStorageRetrieverTool(Tool):
             embedding_model_id=config["embedding_model_id"],
             embedding_model_type=config["embedding_model_type"],
             retriever_type=config["retriever_type"],
-            k=5,
+            # T4: k is now read from config instead of hardcoded to 5
+            k=config.get("retriever_k", 5),
             device=config["device"],
             persistent_path=config["data_dir"],
             similarity_score_threshold=config.get("similarity_score_threshold", 0.55),
+            # T4: chunk sizes are now configurable via YAML
+            child_chunk_size=config.get("child_chunk_size", 200),
+            parent_chunk_size=config.get("parent_chunk_size", 800),
+            # T5/T6: reranker and hybrid retrieval are opt-in via config
+            reranker_model_id=config.get("reranker_model_id"),
+            use_hybrid_retrieval=config.get("use_hybrid_retrieval", False),
         )
 
     @mlflow_track(name="DiskStorageRetrieverTool.forward")

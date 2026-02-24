@@ -256,26 +256,28 @@ class QuestionAnswerTool(Tool):
         logger.info(f"QuestionAnswerTool - Generating answer for question: {question}")
         logger.debug(f"QuestionAnswerTool - Context preview: {context[:200]}...")
         
-        # Prompt for concise answer generation
+        # T7: Prompt avec instruction de langue pour répondre dans la langue de la question
+        # T4: Modèle LLM lu depuis settings.OPENAI_MODEL_ID (plus de hardcode "gpt-4o-mini")
         answer_prompt = f"""
         Question: {question}
-        
+
         Context from retrieved documents:
         {context}
-        
-        Based on the context above, provide a concise, short and accurate answer to the question. 
+
+        Based on the context above, provide a concise, short and accurate answer to the question.
         The answer should be clear, factual, and directly address the question.
         Keep the answer brief but informative. The answer should be less than 100 words.
-        
+        Respond in the same language as the question.
+
         If the documents do not contain relevant information to answer the question, respond with "Aucun documents".
-        
+
         Answer:
         """
-        
+
         try:
             logger.info("QuestionAnswerTool - Calling LLM...")
             response = self.client.chat.completions.create(
-                model="gpt-4o-mini",
+                model=settings.OPENAI_MODEL_ID,
                 messages=[{"role": "user", "content": answer_prompt}]
             )
             answer = response.choices[0].message.content.strip()

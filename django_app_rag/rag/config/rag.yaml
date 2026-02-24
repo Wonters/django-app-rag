@@ -45,3 +45,31 @@ processing_batch_size: 2
 processing_max_workers: 2
 device: cpu # or cuda (for Nvidia GPUs) or mps (for Apple M1/M2/M3 chips)
 storage_mode: overwrite
+
+# ── Retrieval ─────────────────────────────────────────────────────────────────
+
+# Nombre de documents retournés par le retriever
+retriever_k: 5
+
+# Seuil de similarité (cosine) pour filtrer les résultats FAISS
+similarity_score_threshold: 0.55
+
+# Tailles des chunks parent/enfant pour le ParentDocumentRetriever
+# child: indexé dans FAISS (granulaire, pour la recherche)
+# parent: retourné au LLM (plus contextuel)
+child_chunk_size: 200
+parent_chunk_size: 800
+
+# ── Retrieval hybride (FAISS + BM25) ─────────────────────────────────────────
+# Combine la recherche dense (embeddings) et sparse (BM25) via RRF.
+# Améliore le recall sur les termes techniques exacts (codes, noms propres).
+# Nécessite: pip install rank-bm25
+use_hybrid_retrieval: false
+
+# ── Reranking ─────────────────────────────────────────────────────────────────
+# Reclasse les documents récupérés avec un CrossEncoder avant envoi au LLM.
+# Améliore la précision sans changer le recall.
+# Mettre à null pour désactiver. Modèles recommandés:
+#   - cross-encoder/ms-marco-MiniLM-L-6-v2  (rapide, anglais)
+#   - cross-encoder/mmarco-mMiniLMv2-L12-H384-v1  (multilingue)
+reranker_model_id: ~  # null: désactivé par défaut
